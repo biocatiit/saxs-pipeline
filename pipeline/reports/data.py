@@ -1,5 +1,8 @@
-
 import collections
+
+import numpy as np
+
+from . import utils
 
 GuinierData = collections.namedtuple('Guinier', ['Rg', 'I0', 'Rg_err',
     'I0_err', 'n_min', 'n_max', 'q_min', 'q_max', 'qRg_min', 'qRg_max', 'r_sq'],
@@ -39,6 +42,27 @@ class SECData(object):
     experiment in a single python object, with easily accessible info.
     """
 
+    _calib_trans = {
+        'Sample-to-detector distance (mm)'  : 'distance',
+        'Sample_Detector_Distance'          : 'distance',
+        'Wavelength (A)'                    : 'wavelength',
+        'Wavelength'                        : 'wavelength',
+        }
+
+    _counters_trans = {
+        'Flow rate (ml/min)'        : 'flow',
+        'LC_flow_rate_mL/min'       : 'flow',
+        'Exposure_time/frame_s'     : 'exp_time',
+        'Exposure_period/frame_s'   : 'exp_period',
+        'Instrument'                : 'instrument',
+        'File_prefix'               : 'prefix',
+        'Date'                      : 'date',
+        }
+
+    _metadata_trans = {
+        'Detector'  : 'detector',
+        }
+
     def __init__(self, secm):
         """
         Takes as input a RAW SECM object, and extracts parameters from there.
@@ -48,6 +72,9 @@ class SECData(object):
 
         self.buffer_range = secm.buffer_range
         self.sample_range = secm.sample_range
+        self.baseline_start_range = secm.baseline_start_range
+        self.baseline_end_range = secm.baseline_end_range
+        self.baseline_type = secm.baseline_type
 
         self.rg = secm.rg_list
         self.rg_err = secm.rger_list
@@ -80,6 +107,65 @@ class SECData(object):
 
             self.baseline_corrected = False
             self.subtracted = False
+
+        self.get_metadata(secm)
+        self.get_efa_data(secm)
+
+    def get_metadata(self, secm):
+        self.metadata = {}
+
+        first_prof = secm.getSASM(0)
+
+        all_params = first_prof.getAllParameters()
+
+        if 'counters' in all_params:
+            counters = first_prof.getParameter('counters')
+            for key, value in self._counters_trans.items():
+                if key in counters:
+                    self.metadata[value] = counters[key]
+
+        if 'calibration_params' in all_params:
+            calibration_params = first_prof.getParameter('calibration_params')
+
+            for key, value in self._calib_trans.items():
+                if key in calibration_params:
+                    self.metadata[value] = calibration_params[key]
+
+        if 'metadata' in all_params:
+            metadata = first_prof.getParameter('metadata')
+
+            for key, value in self._metadata_trans.items():
+                if key in metadata:
+                    self.metadata[value] = metadata[key]
+
+        if 'raw_version' in all_params:
+            self.metadata['version'] = all_params['raw_version']
+
+        q_i = first_prof.getQ()[0]
+        q_f = first_prof.getQ()[-1]
+        self.metadata['q_range'] = '{} to {}'.format(utils.text_round(q_i, 4),
+            utils.text_round(q_f, 2))
+
+    def get_efa_data(self, secm):
+        analysis_dict = secm.getParameter('analysis')
+
+        if 'efa' in analysis_dict:
+            efa_dict = analysis_dict['efa']
+
+            self.efa_done = True
+            self.efa_ranges = efa_dict['ranges']
+            self.efa_start = efa_dict['fstart']
+            self.efa_end = efa_dict['fend']
+            self.efa_nsvs = efa_dict['nsvs']
+
+        else:
+            self.efa_done = False
+            self.efa_ranges = []
+            self.efa_start = ''
+            self.efa_end = ''
+            self.efa_nsvs = ''
+
+
 
 class SAXSData(object):
     """
@@ -194,12 +280,16 @@ class SAXSData(object):
 
     _calib_trans = {
         'Sample-to-detector distance (mm)'  : 'Sample_to_detector_distance',
+        'Sample_Detector_Distance'          : 'Sample_to_detector_distance',
         'Wavelength (A)'                    : 'Wavelength',
+        'Wavelength'                        : 'Wavelength',
         }
 
     _counters_trans = {
         'Flow rate (ml/min)'        : 'Flow_rate',
+        'LC_flow_rate_mL/min'       : 'Flow_rate',
         'Exposure time/frame (s)'   : 'Exposure_time',
+        'Exposure_time/frame_s'     : 'Exposure_time',
         'Exposure_period/frame_s'   : 'Exposure_period',
         'Instrument'                : 'Instrument',
         }
@@ -404,3 +494,104 @@ class IFTData(object):
 
         self.p = self._p_orig/self.i0
         self.p_err = self._p_err_orig/self.i0
+
+class EFAData(object):
+    """
+    Contains information about EFA that's not contained within the series analysis
+    dictionary.
+    """
+
+    def __init__(self):
+        pass
+
+def parse_efa_file(filename):
+    with open(filename, 'r') as f:
+        data = f.readlines()
+
+    conc_idx = -1
+    chi_idx = -1
+    fwd_idx = -1
+    bck_idx = -1
+    svd_idx = -1
+
+    for j, line in enumerate(data):
+        if 'Concentration Matrix' in line:
+            conc_idx = j
+
+        elif 'Rotation Chi^2' in line:
+            chi_idx = j
+
+        elif 'Forward EFA Results' in line:
+            fwd_idx = j
+
+        elif 'Backward EFA Results' in line:
+            bck_idx = j
+
+        elif 'Singular Value Results' in line:
+            svd_idx = j
+
+    if conc_idx >= 0 and chi_idx >=0:
+        conc_data = data[conc_idx+2:chi_idx-1]
+    else:
+        conc_data = []
+
+    if chi_idx >=0 and fwd_idx >=0:
+        chi_data =data[chi_idx+2:fwd_idx-1]
+    else:
+        chi_data = []
+
+    if fwd_idx >=0 and bck_idx >=0:
+        fwd_data =data[fwd_idx+2:bck_idx-1]
+    else:
+        fwd_data = []
+
+    if bck_idx >=0 and svd_idx >=0:
+        bck_data =data[bck_idx+2:svd_idx-1]
+    else:
+        bck_data = []
+
+    frames = []
+    conc = []
+    chi = []
+    fwd = []
+    bck = []
+
+    for line in conc_data:
+        data = line.split(',')
+        frame = int(float(data[0]))
+        temp_data= list(map(float, data[1:]))
+
+        frames.append(frame)
+        conc.append(temp_data)
+
+    frames = np.array(frames)
+    conc = np.array(conc)
+
+    for line in chi_data:
+        data = line.split(',')
+        temp_data= float(data[1])
+
+        chi.append(temp_data)
+
+    chi = np.array(chi)
+
+    for line in fwd_data:
+        data = line.split(',')
+        temp_data= list(map(float, data[1:]))
+        fwd.append(temp_data)
+
+    fwd = np.array(fwd)
+
+    for line in bck_data:
+        data = line.split(',')
+        temp_data= list(map(float, data[1:]))
+
+        bck.append(temp_data)
+
+    bck = np.array(bck)
+
+    return frames, conc, chi, fwd, bck
+
+
+
+
