@@ -1,4 +1,6 @@
 from collections import OrderedDict, defaultdict
+import tempfile
+import os
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
@@ -9,9 +11,11 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Imag
 from . import plots
 
 from .utils import text_round as text_round
-from . import utils
+from . import data
 
-def generate_report(profiles, ifts, series, extra_data=None):
+temp_files = []
+
+def generate_report(fname, datadir, profiles, ifts, series, extra_data=None):
     """
     Inputs a list of profile data, a list of ift data, and a list of series
     data to be included in the report. Makes a PDF report.
@@ -21,39 +25,50 @@ def generate_report(profiles, ifts, series, extra_data=None):
 
     overview = generate_overview(profiles, ifts, series)
     elements.extend(overview)
-    elements.append(CondPageBreak(2*inch))
 
     exp = generate_exp_params(profiles, ifts, series)
     elements.extend(exp)
-    elements.append(CondPageBreak(2*inch))
 
-    s_elements = generate_series_params(profiles, ifts, series, extra_data)
-    elements.extend(s_elements)
-    elements.append(CondPageBreak(2*inch))
+    if len(series) > 0:
+        s_elements = generate_series_params(profiles, ifts, series, extra_data)
+        elements.extend(s_elements)
 
-    # guinier = generate_guinier_params(profiles, ifts, series)
-    # elements.extend(guinier)
-    # elements.append(CondPageBreak(2*inch))
+    if len(profiles) > 0:
+        guinier = generate_guinier_params(profiles, ifts, series)
+        elements.extend(guinier)
 
-    # mw = generate_mw_params(profiles, ifts, series)
-    # elements.extend(mw)
-    # elements.append(CondPageBreak(2*inch))
+        mw = generate_mw_params(profiles, ifts, series)
+        elements.extend(mw)
 
-    # gnom = generate_gnom_params(profiles, ifts, series)
-    # elements.extend(gnom)
-    # elements.append(CondPageBreak(2*inch))
+    if len(ifts) > 0:
+        if any(ift.type == 'GNOM' for ift in ifts):
+            gnom = generate_gnom_params(profiles, ifts, series)
+            elements.extend(gnom)
 
-    # bift = generate_bift_params(profiles, ifts, series)
-    # elements.extend(bift)
-    # elements.append(CondPageBreak(2*inch))
+        if any(ift.type == 'BIFT' for ift in ifts):
+            bift = generate_bift_params(profiles, ifts, series)
+            elements.extend(bift)
 
-    # dammif = generate_dammif_params(profiles, ifts, series)
-    # elements.extend(dammif)
-    # elements.append(CondPageBreak(2*inch))
+    if (extra_data is not None and 'dammif' in extra_data and
+        any(dam_data is not None for dam_data in extra_data['dammif'])):
+        dammif = generate_dammif_params(extra_data['dammif'])
+        elements.extend(dammif)
 
-    doc = SimpleDocTemplate('test.pdf', pagesize=letter, leftMargin=1*inch,
-        rightMargin=1*inch, topMargin=1*inch, bottomMargin=1*inch)
+    datadir = os.path.abspath(os.path.expanduser(datadir))
+    fname = '{}.pdf'.format(os.path.splitext(fname)[0])
+
+    doc = SimpleDocTemplate(os.path.join(datadir, fname), pagesize=letter,
+        leftMargin=1*inch, rightMargin=1*inch, topMargin=1*inch,
+        bottomMargin=1*inch)
     doc.build(elements)
+
+    global temp_files
+
+    for fname in temp_files:
+        if os.path.isfile(fname):
+            os.remove(fname)
+
+    temp_files = []
 
 def generate_overview(profiles, ifts, series):
     """
@@ -61,17 +76,29 @@ def generate_overview(profiles, ifts, series):
     """
     styles = getSampleStyleSheet()
 
+    elements = []
+
     name_list = []
     date_list = []
 
-    for s in series:
-        if 'prefix' in s.metadata:
-            name_list.append(s.metadata['prefix'])
+    if len(series) > 0:
+        data_list = series
+    elif len(profiles) > 0:
+        data_list = profiles
+    elif len(ifts) > 0:
+        data_list = ifts
+    else:
+        data_list = []
+
+    for s in data_list:
+        if ('File_prefix' in s.metadata._fields
+            and getattr(s.metadata, 'File_prefix') != ''):
+            name_list.append(getattr(s.metadata, 'File_prefix'))
         else:
             name_list.append(s.filename)
 
-        if 'date' in s.metadata:
-            date_list.append(':'.join(s.metadata['date'].split(':')[:-1]))
+        if 'Date' in s.metadata._fields and getattr(s.metadata, 'Date') != '':
+            date_list.append(':'.join(getattr(s.metadata, 'Date').split(':')[:-1]))
         else:
             date_list.append('N/A')
 
@@ -90,35 +117,104 @@ def generate_overview(profiles, ifts, series):
         'Collection date(s): {}'.format(name_str, date_str))
     ov_summary = XPreformatted(summary_text, styles['Normal'])
 
+    elements.append(ov_title)
+    elements.append(ov_text)
+    elements.append(ov_summary)
 
-    # table_data = []
 
-    # table_header = ['', 'Guinier Rg', 'Guinier I(0)']
+    # Make overview figure
+    if len(profiles) > 0:
+        has_profiles = True
+    else:
+        has_profiles = False
 
-    # mw_keys = []
+    if len(ifts) > 0:
+        has_ifts = True
+    else:
+        has_ifts = False
 
-    # for profile in profiles:
-    #     for key, value in profile.mw_data.items():
-    #         if value.MW != -1 and value.MW != '':
-    #             if key == 'Volume_of_correlation':
-    #                 header = 'M.W. (Vc)'
-    #             elif key == 'Porod_volume':
-    #                 header = 'M.W. (Vp)'
-    #             elif key == 'Shape_and_size':
-    #                 header = 'M.W. (S&S)'
-    #             elif key == 'Bayesian':
-    #                 header = 'M.W. (Bayes)'
-    #             else:
-    #                 header = key
+    if len(series) > 0:
+        has_series = True
+    else:
+        has_series = False
 
-    #             if key not in mw_keys:
-    #                 mw_keys.append(key)
+    if 'N/A' in name_str:
+        caption = ('SAXS data summary figure.')
+    else:
+        caption = ('SAXS data summary figure for {}. '.format(name_str))
 
-    #             if header not in table_header:
-    #                 table_header.append(header)
+    if len(series) == 1:
+        series_label = ('Series intensity (blue, left axis) vs. frame, and, if '
+            'available, Rg vs. frame (red, right axis). Green shaded regions '
+            'are buffer regions, purple shaded regions are sample regions.')
+    else:
+        series_label = ('Series intensity (left axis) vs. frame, and, if '
+            'available, Rg vs. frame (right axis). Green shaded regions are '
+            'buffer regions, purple shaded regions are sample regions.')
 
-    # table_header.extend(['GNOM Dmax', 'GNOM Rg', 'GNOM I(0)'])
+    profile_label = ('Scattering profile(s) on a log-lin scale.')
+    guinier_label = ('Guinier fit(s) (top) and fit residuals (bottom).')
+    kratky_label = ('Normalized Kratky plot. Dashed lines show where a '
+        'globular system would peak.')
+    ift_label = ('P(r) function(s), normalized by I(0).')
 
+
+    img_width = 6
+
+    if has_profiles and has_ifts and has_series:
+        img_height = 6
+
+        caption = ('{} a) {} b) {} c) {} d) {} e) {}'.format(caption,
+            series_label, profile_label, guinier_label, kratky_label,
+            ift_label))
+
+    elif has_profiles and has_ifts and not has_series:
+        img_height = 4
+
+        caption = ('{} a) {} b) {} c) {} d) {}'.format(caption, profile_label,
+            guinier_label, kratky_label, ift_label))
+
+    elif has_profiles and not has_ifts and has_series:
+        img_height = 6
+
+        caption = ('{} a) {} b) {} c) {} d) {}'.format(caption, series_label,
+            profile_label, guinier_label, kratky_label))
+
+    elif has_profiles and not has_ifts and not has_series:
+        img_height = 4
+
+        caption = ('{} a) {} b) {} c) {}'.format(caption, profile_label,
+            guinier_label, kratky_label))
+
+    elif not has_profiles and has_ifts and has_series:
+        img_height = 4
+
+        caption = ('{} a) {} b) {}'.format(caption, series_label, ift_label))
+
+    elif not has_profiles and not has_ifts and has_series:
+        img_height = 2
+
+        caption = ('{} {}'.format(caption, series_label))
+
+    elif not has_profiles and has_ifts and not has_series:
+        img_height = 2
+
+        caption = ('{} {}'.format(caption, ift_label))
+
+    else:
+        img_height = 0
+
+    if img_height > 0:
+        ov_plot = plots.series_overview_plot(profiles, ifts, series,
+            img_width=img_width, img_height=img_height)
+
+        ov_figure = make_figure(ov_plot.figure, caption, img_width, img_height,
+            styles)
+
+        elements.append(ov_figure)
+
+
+    # Make overview table
     table_pairs = [
         ('', 'name'),
         ('Guinier Rg', 'gu_rg'),
@@ -127,8 +223,8 @@ def generate_overview(profiles, ifts, series):
         ('M.W. (Vc)', 'mw_vc'),
         ('M.W. (S&S)', 'mw_ss'),
         ('M.W. (Bayes)', 'mw_bayes'),
-        ('M.W. Abs.', 'mw_abs'),
-        ('M.W. Ref.', 'mw_ref'),
+        ('M.W. (Abs.)', 'mw_abs'),
+        ('M.W. (Ref.)', 'mw_ref'),
         ('GNOM Dmax', 'gn_dmax'),
         ('GNOM Rg', 'gn_rg'),
         ('GNOM I(0)', 'gn_i0'),
@@ -267,82 +363,67 @@ def generate_overview(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    ov_table = Table(table_data, spaceBefore=0.25*inch, spaceAfter=0.1*inch)
+    if len(table_data) > 0:
+        ov_table = Table(table_data, spaceBefore=0.25*inch, spaceAfter=0.1*inch)
 
-    table_style = TableStyle(
-        [('INNERGRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ALIGN', (1,0), (-1, -1), 'CENTER')
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    ov_table.setStyle(table_style)
-    ov_table.hAlign = 'LEFT'
+        ov_table.setStyle(table_style)
+        ov_table.hAlign = 'LEFT'
 
-    if 'N/A' in name_str:
-        table_caption = ('SAXS data summary table. ')
-    else:
-        table_caption = ('SAXS data summary table for {}. '.format(name_str))
+        if 'N/A' in name_str:
+            table_caption = ('SAXS data summary table. ')
+        else:
+            table_caption = ('SAXS data summary table for {}. '.format(name_str))
 
-    table_text = Paragraph(table_caption, styles['Normal'])
+        table_text = Paragraph(table_caption, styles['Normal'])
 
-    ov_table = KeepTogether([ov_table, table_text])
+        ov_table = KeepTogether([ov_table, table_text])
 
-    img_width = 6
-    img_height = 6
+        elements.append(ov_table)
 
-    ov_plot = plots.series_overview_plot(profiles, ifts, series,
-        img_width=img_width, img_height=img_height)
-
-    if 'N/A' in name_str:
-        caption = ('SAXS data summary figure. ')
-    else:
-        caption = ('SAXS data summary figure for {}. '.format(name_str))
-
-    caption = caption + ('a) Series intensity (left axis) vs. '
-        'frame, and if available, Rg vs. frame (right axis). Green '
-        'shaded regions are buffer regions, purple shaded regions are sample '
-        'regions. b) Scattering profile(s) on a log-lin scale. c) Guinier fit(s) '
-        '(top) and fit residuals (bottom). d) Normalized Kratky plot. Dashed '
-        'lines show where a globuar system would peak. e) P(r) function(s), '
-        'normalized by I(0).')
-
-    ov_figure = make_figure(ov_plot.figure, caption, img_width, img_height,
-        styles)
-
-    return [ov_title, ov_text, ov_summary, ov_figure, ov_table]
+    return elements
 
 
 def generate_exp_params(profiles, ifts, series):
     styles = getSampleStyleSheet()
 
     name_list = []
-    date_list = []
 
-    for s in series:
-        if 'prefix' in s.metadata:
-            name_list.append(s.metadata['prefix'])
+    if len(series) > 0:
+        data_list = series
+    elif len(profiles) > 0:
+        data_list = profiles
+    else:
+        data_list = []
+
+    for s in data_list:
+        if isinstance(s, data.SECData):
+            if ('File_prefix' in s.metadata._fields
+            and getattr(s.metadata, 'File_prefix') != ''):
+                name_list.append(getattr(s.metadata, 'File_prefix'))
+            else:
+                name_list.append(s.filename)
         else:
             name_list.append(s.filename)
 
-        if 'date' in s.metadata:
-            date_list.append(':'.join(s.metadata['date'].split(':')[:-1]))
-        else:
-            date_list.append('')
-
     exp_text = Paragraph('Experimental parameters:', styles['Heading2'])
-
 
     table_pairs = [
         ('', 'name'),
-        ('Date', 'date'),
-        ('Instrument', 'instrument'),
-        ('Detector', 'detector'),
-        ('Wavelength (A)', 'wavelength'),
-        ('Camera length (m)', 'distance'),
+        ('Date', 'Date'),
+        ('Instrument', 'Instrument'),
+        ('Detector', 'Detector'),
+        ('Wavelength (A)', 'Wavelength'),
+        ('Camera length (m)', 'Sample_to_detector_distance'),
         ('q-measurement range (1/A)', 'q_range'),
-        ('Exposure time (s)', 'exp_time'),
-        ('Exposure period (s)', 'exp_period'),
-        ('Flow rate (ml/min)', 'flow_rate'),
-        ('RAW version', 'version'),
+        ('Exposure time (s)', 'Exposure_time'),
+        ('Exposure period (s)', 'Exposure_period'),
+        ('Flow rate (ml/min)', 'Flow_rate'),
+        ('RAW version', 'RAW_version'),
         ]
 
     table_dict = OrderedDict()
@@ -352,21 +433,20 @@ def generate_exp_params(profiles, ifts, series):
     required_data = ['', 'Date', 'Wavelength (A)', 'Camera length (m)',
         'Exposure time (s)']
 
-    for j, s in enumerate(series):
-
+    for j, s in enumerate(data_list):
         for header, key in table_pairs:
-            if key in s.metadata:
-                value = s.metadata[key]
+            if key in s.metadata._fields:
+                value = getattr(s.metadata, key)
             else:
                 value = ''
 
-            if key == 'wavelength':
+            if key == 'Wavelength':
                 if value != '' and value != -1:
                     value = text_round(value, 3)
                 else:
                     value = ''
 
-            elif key == 'distance':
+            elif key == 'Sample_to_detector_distance':
                 if value != '' and value != -1:
                     value = float(value)/1000.
                     value = text_round(value, 3)
@@ -376,8 +456,8 @@ def generate_exp_params(profiles, ifts, series):
             elif key == 'name':
                 value = name_list[j]
 
-            elif key == 'date':
-                value = date_list[j]
+            elif key == 'Date':
+                value = ':'.join(value.split(':')[:-1])
 
             else:
                 if value != -1:
@@ -402,17 +482,23 @@ def generate_exp_params(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    exp_table = Table(table_data, spaceBefore=0.25*inch, spaceAfter=0.1*inch)
+    if len(table_data) > 0:
+        exp_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    exp_table.setStyle(table_style)
-    exp_table.hAlign = 'LEFT'
+        exp_table.setStyle(table_style)
+        exp_table.hAlign = 'LEFT'
 
-    return [exp_text, exp_table]
+        elements = [exp_text, exp_table]
+
+    else:
+        elements = []
+
+    return elements
 
 
 def generate_series_params(profiles, ifts, series, extra_data):
@@ -488,7 +574,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    series_table = Table(table_data, spaceBefore=0.25*inch, spaceAfter=0.1*inch)
+    series_table = Table(table_data)
 
     table_style = TableStyle(
         [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
@@ -499,7 +585,21 @@ def generate_series_params(profiles, ifts, series, extra_data):
     series_table.hAlign = 'LEFT'
     series_table = KeepTogether([series_text, series_table])
 
+    elements = [series_table]
+
     efa_elements = []
+
+    efa_table_pairs = [
+        ('', 'name'),
+        ('EFA data range', 'efa_range'),
+        ('Number of components', 'nsvs'),
+        ]
+
+    efa_table_dict = OrderedDict()
+
+    efa_table_data = []
+
+    efa_required_data = ['', 'EFA data range', 'Number of components']
 
     for j, s in enumerate(series):
         if s.efa_done:
@@ -509,6 +609,54 @@ def generate_series_params(profiles, ifts, series, extra_data):
             else:
                 efa_title = Paragraph('EFA results:', styles['Heading3'])
 
+            # Make EFA table
+            for header, key in efa_table_pairs:
+                if key == 'name':
+                    value = name_list[j]
+                elif key == 'efa_range':
+                    value = '{} to {}'.format(s.efa_start, s.efa_end)
+                elif key == 'nsvs':
+                    value = '{}'.format(s.efa_nsvs)
+
+                if header in efa_table_dict:
+                    efa_table_dict[header].append(value)
+                else:
+                    efa_table_dict[header] = [value]
+
+            for k, efa_range in enumerate(s.efa_ranges):
+                header = 'Component {}'.format(k)
+                value = '{} to {}'.format(*efa_range)
+
+                if header in efa_table_dict:
+                    efa_table_dict[header].append(value)
+                else:
+                    efa_table_dict[header] = [value]
+
+
+            for header, values in efa_table_dict.items():
+                if header in efa_required_data:
+                    efa_table_entry = [header]
+                    efa_table_entry.extend(values)
+                    efa_table_data.append(efa_table_entry)
+                else:
+                    if any(val != '' for val in values):
+                        efa_table_entry = [header]
+                        efa_table_entry.extend(values)
+                        efa_table_data.append(efa_table_entry)
+
+            efa_table = Table(efa_table_data)
+
+            table_style = TableStyle(
+                [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+                ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+                ])
+
+            efa_table.setStyle(table_style)
+            efa_table.hAlign = 'LEFT'
+            # efa_table = KeepTogether([efa_table])
+
+
+            # Make EFA plot
             if extra_data is not None:
                 extra_efa_data = extra_data['efa'][j]
             else:
@@ -516,16 +664,578 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
             efa_plot = plots.efa_plot(s, extra_efa_data)
 
-    return [series_table]
+            img_width = 6
+            img_height = 2
+
+            efa_caption = ('EFA deconvolution results. a) The full series '
+                'intensity (blue), the selected intensity range for EFA '
+                '(black), and (if available) Rg values (red). b) The selected '
+                'intensity range for EFA (black), and the individual component '
+                'ranges for deconvolution, with component range 0 starting at '
+                'the top left, and component number increasing in descending '
+                'order to the right.')
+
+            if extra_efa_data is not None:
+                efa_caption = efa_caption + (' c) Mean chi^2 values between the '
+                    'fit of the EFA deconvolution and the original data. d) '
+                    'Area normalized concentration profiles for each component. '
+                    'Colors match the component range colors in b.')
+
+                img_height = 4
+
+                if extra_efa_data['profiles'] is not None:
+                    efa_caption = efa_caption + (' e) Deconvolved scattering '
+                        'profiles. Colors match the component range colors in '
+                        'b and the concentration range colors in d.')
+
+                    img_height = 6
+
+            efa_figure = make_figure(efa_plot.figure, efa_caption, img_width,
+                img_height, styles)
+
+            efa_elements.append(efa_title)
+            efa_elements.append(efa_table)
+            efa_elements.append(efa_figure)
+
+    elements.extend(efa_elements)
+
+    return elements
+
+def generate_guinier_params(profiles, ifts, series):
+    styles = getSampleStyleSheet()
+
+    guinier_text = Paragraph('Guinier:', styles['Heading2'])
+
+    absolute = [profile.metadata.Absolute_scale for profile in profiles]
+    if all(absolute):
+        i0_label = 'I(0) [1/cm]'
+    else:
+        i0_label = 'I(0) [Arb.]'
+
+    table_pairs = [
+        ('', 'name'),
+        ('Rg [A]', 'rg'),
+        (i0_label, 'i0'),
+        ('q-range [1/A]', 'q_range'),
+        ('qmin*Rg', 'qRg_min'),
+        ('qmax*Rg', 'qRg_max'),
+        ('r^2', 'rsq'),
+        ]
+
+    table_dict = OrderedDict()
+
+    table_data = []
+
+    required_data = ['', 'Rg [A]', 'I(0)', 'q-range [1/A]', 'qmin*Rg', 'qmax*Rg',
+        'r^2']
+
+
+    for profile in profiles:
+        filename = profile.filename
+
+        if profile.guinier_data.Rg != -1:
+            rg = profile.guinier_data.Rg
+            rg_err = profile.guinier_data.Rg_err
+            i0 = profile.guinier_data.I0
+            i0_err = profile.guinier_data.I0_err
+            qmin = profile.guinier_data.q_min
+            qmax = profile.guinier_data.q_max
+            qRg_min = profile.guinier_data.qRg_min
+            qRg_max = profile.guinier_data.qRg_max
+            rsq = profile.guinier_data.r_sq
+
+            rg = '{} +/- {}'.format(text_round(rg, 2),
+                text_round(rg_err, 2))
+            i0 = '{} +/- {}'.format(text_round(i0, 2),
+                text_round(i0_err, 2))
+
+            q_range = '{} to {}'.format(text_round(qmin, 4), text_round(qmax, 4))
+            qmin_Rg = '{}'.format(text_round(qRg_min, 3))
+            qmax_Rg = '{}'.format(text_round(qRg_max, 3))
+            rsq = '{}'.format(text_round(rsq, 3))
+        else:
+            rg = ''
+            i0 = ''
+            q_range = ''
+            qmin_Rg = ''
+            qmax_Rg = ''
+            rsq = ''
+
+
+        for header, key in table_pairs:
+            if key == 'name':
+                value = filename
+            elif key == 'rg':
+                value = rg
+            elif key == 'i0':
+                value = i0
+            elif key == 'q_range':
+                value = q_range
+            elif key == 'qRg_min':
+                value = qmin_Rg
+            elif key == 'qRg_max':
+                value = qmax_Rg
+            elif key == 'rsq':
+                value = rsq
+
+            if header in table_dict:
+                table_dict[header].append(value)
+            else:
+                table_dict[header] = [value]
+
+    for header, values in table_dict.items():
+        if header in required_data:
+            table_entry = [header]
+            table_entry.extend(values)
+            table_data.append(table_entry)
+        else:
+            if any(val != '' for val in values):
+                table_entry = [header]
+                table_entry.extend(values)
+                table_data.append(table_entry)
+
+    guinier_table = Table(table_data)
+
+    table_style = TableStyle(
+        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+        ])
+
+    guinier_table.setStyle(table_style)
+    guinier_table.hAlign = 'LEFT'
+    guinier_table = KeepTogether([guinier_text, guinier_table])
+
+    return [guinier_table]
+
+def generate_mw_params(profiles, ifts, series):
+    styles = getSampleStyleSheet()
+
+    mw_text = Paragraph('Molecular weight:', styles['Heading2'])
+
+    table_pairs = [
+        ('', 'name'),
+        ('M.W. (Vp) [kDa]', 'mw_vp'),
+        ('Porod Volume [A^3]', 'vp'),
+        ('M.W. (Vc) [kDa]', 'mw_vc'),
+        ('M.W. (S&S) [kDa]', 'mw_ss'),
+        ('Shape (S&S)', 'shape'),
+        ('Dmax (S&S)', 'dmax'),
+        ('M.W. (Bayes) [kDa]', 'mw_bayes'),
+        ('Bayes Probability', 'prob'),
+        ('Bayes Confidence Interval', 'ci'),
+        ('Bayes C.I. Prob.', 'ci_prob'),
+        ('M.W. (Abs.) [kDa]', 'mw_abs'),
+        ('M.W. (Ref.) [kDa]', 'mw_ref'),
+        ]
+
+    table_dict = OrderedDict()
+
+    table_data = []
+
+    required_data = ['', 'M.W. (Vp)', 'M.W. (Vc)']
+
+
+    for profile in profiles:
+
+        filename = profile.filename
+
+        mw_data = defaultdict(str)
+
+        for mw_key in profile.mw_data:
+            mw_val = profile.mw_data[mw_key]
+
+            if mw_val.MW != -1 and mw_val.MW != '':
+                val = text_round(mw_val.MW, 1)
+            else:
+                val = ''
+
+            if mw_key == 'Volume_of_correlation':
+                table_key = 'mw_vc'
+            elif mw_key == 'Porod_volume':
+                table_key = 'mw_vp'
+            elif mw_key == 'Shape_and_size':
+                table_key = 'mw_ss'
+            elif mw_key == 'Bayesian':
+                table_key = 'mw_bayes'
+            elif mw_key == 'Absolute':
+                table_key = 'mw_abs'
+            elif mw_key == 'Reference':
+                table_key = 'mw_ref'
+
+            mw_data[table_key] = val
+
+        p_vol = ''
+
+        if 'Porod_volume' in profile.mw_data:
+            mw_val = profile.mw_data['Porod_volume']
+
+            if mw_val.MW != -1 and mw_val.MW != '':
+                p_vol = '{}'.format(text_round(mw_val.Porod_volume_corrected, 2))
+
+        prob = ''
+        ci = ''
+        ci_prob = ''
+
+        if 'Bayesian' in profile.mw_data:
+            mw_val = profile.mw_data['Bayesian']
+
+            if mw_val.MW != -1 and mw_val.MW != '':
+                prob = '{}'.format(text_round(mw_val.Probability, 1))
+
+                ci_lower = mw_val.Confidence_interval_lower
+                ci_upper = mw_val.Confidence_interval_upper
+
+                ci = ('{} to {}'.format(text_round(ci_lower, 1),
+                    text_round(ci_upper, 1)))
+
+                ci_prob = '{}'.format(text_round(mw_val.Confidence_interval_probability, 1))
+
+        shape = ''
+        dmax = ''
+
+        if 'Shape_and_size' in profile.mw_data:
+            mw_val = profile.mw_data['Shape_and_size']
+
+            if mw_val.MW != -1 and mw_val.MW != '':
+                shape = mw_val.Shape
+                dmax = '{}'.format(mw_val.Dmax)
+
+
+        for header, key in table_pairs:
+            if key == 'name':
+                value = filename
+            elif key.startswith('mw'):
+                value =mw_data[key]
+            elif key == 'vp':
+                value = p_vol
+            elif key == 'prob':
+                value = prob
+            elif key == 'ci':
+                value = ci
+            elif key == 'ci_prob':
+                value = ci_prob
+            elif key == 'shape':
+                value = shape
+            elif key == 'dmax':
+                value = dmax
+
+            if header in table_dict:
+                table_dict[header].append(value)
+            else:
+                table_dict[header] = [value]
+
+    for header, values in table_dict.items():
+        if header in required_data:
+            table_entry = [header]
+            table_entry.extend(values)
+            table_data.append(table_entry)
+        else:
+            if any(val != '' for val in values):
+                table_entry = [header]
+                table_entry.extend(values)
+                table_data.append(table_entry)
+
+    mw_table = Table(table_data)
+
+    table_style = TableStyle(
+        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+        ])
+
+    mw_table.setStyle(table_style)
+    mw_table.hAlign = 'LEFT'
+    mw_table = KeepTogether([mw_text, mw_table])
+
+    return [mw_table]
+
+def generate_gnom_params(profiles, ifts, series):
+    styles = getSampleStyleSheet()
+
+    gnom_text = Paragraph('GNOM IFT:', styles['Heading2'])
+
+    table_pairs = [
+        ('', 'name'),
+        ('Dmax [A]', 'dmax'),
+        ('Rg [A]', 'rg'),
+        ('I(0)', 'i0'),
+        ('Chi^2', 'chi_sq'),
+        ('Total Estimate', 'te'),
+        ('Quality', 'quality'),
+        ('Ambiguity score', 'a_score'),
+        ('Ambiguity cats.', 'a_cats'),
+        ('Ambiguity', 'a_interp'),
+        ]
+
+    table_dict = OrderedDict()
+
+    table_data = []
+
+    required_data = ['', 'Dmax [A]', 'Rg [A]', 'I(0)']
+
+
+    for ift in ifts:
+
+        if ift.type == 'GNOM':
+            filename = ift.filename
+
+            dmax = ift.dmax
+            rg = ift.rg
+            rg_err = ift.rg_err
+            i0 = ift.i0
+            i0_err = ift.i0_err
+            chi_sq = ift.chi_sq
+            te = ift.total_estimate
+            quality = ift.quality
+
+            dmax = '{}'.format(text_round(dmax, 0))
+
+            rg = '{} +/- {}'.format(text_round(rg, 2),
+                text_round(rg_err, 2))
+            i0 = '{} +/- {}'.format(text_round(i0, 2),
+                text_round(i0_err, 2))
+
+            chi_sq = '{}'.format(text_round(chi_sq, 3))
+            te = '{}'.format(text_round(te, 3))
+
+            if ift.a_score != -1:
+                a_score = '{}'.format(text_round(ift.a_score, 2))
+                a_cats = '{}'.format(ift.a_cats, 0)
+                a_interp = ift.a_interp
+            else:
+                a_score = ''
+                a_cats = ''
+                a_interp = ''
+
+            for header, key in table_pairs:
+                if key == 'name':
+                    value = filename
+                elif key == 'dmax':
+                    value = dmax
+                elif key == 'rg':
+                    value = rg
+                elif key == 'i0':
+                    value = i0
+                elif key == 'chi_sq':
+                    value = chi_sq
+                elif key == 'te':
+                    value = te
+                elif key == 'quality':
+                    value = quality
+                elif key == 'a_score':
+                    value = a_score
+                elif key == 'a_cats':
+                    value = a_cats
+                elif key == 'a_interp':
+                    value = a_interp
+
+                if header in table_dict:
+                    table_dict[header].append(value)
+                else:
+                    table_dict[header] = [value]
+
+    for header, values in table_dict.items():
+        if header in required_data:
+            table_entry = [header]
+            table_entry.extend(values)
+            table_data.append(table_entry)
+        else:
+            if any(val != '' for val in values):
+                table_entry = [header]
+                table_entry.extend(values)
+                table_data.append(table_entry)
+
+    gnom_table = Table(table_data)
+
+    table_style = TableStyle(
+        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+        ])
+
+    gnom_table.setStyle(table_style)
+    gnom_table.hAlign = 'LEFT'
+    gnom_table = KeepTogether([gnom_text, gnom_table])
+
+    return [gnom_table]
+
+def generate_bift_params(profiles, ifts, series):
+    styles = getSampleStyleSheet()
+
+    bift_text = Paragraph('BIFT:', styles['Heading2'])
+
+    table_pairs = [
+        ('', 'name'),
+        ('Dmax [A]', 'dmax'),
+        ('Rg [A]', 'rg'),
+        ('I(0)', 'i0'),
+        ('Chi^2', 'chi_sq'),
+        ]
+
+    table_dict = OrderedDict()
+
+    table_data = []
+
+    required_data = ['', 'Dmax [A]', 'Rg [A]', 'I(0)']
+
+
+    for ift in ifts:
+
+        if ift.type == 'BIFT':
+            filename = ift.filename
+
+            dmax = ift.dmax
+            dmax_err = ift.dmax_err
+            rg = ift.rg
+            rg_err = ift.rg_err
+            i0 = ift.i0
+            i0_err = ift.i0_err
+            chi_sq = ift.chi_sq
+
+            dmax = '{} +/- {}'.format(text_round(dmax, 1),
+                text_round(dmax_err, 1))
+
+            rg = '{} +/- {}'.format(text_round(rg, 2),
+                text_round(rg_err, 2))
+            i0 = '{} +/- {}'.format(text_round(i0, 2),
+                text_round(i0_err, 2))
+
+            chi_sq = '{}'.format(text_round(chi_sq, 3))
+
+            for header, key in table_pairs:
+                if key == 'name':
+                    value = filename
+                elif key == 'dmax':
+                    value = dmax
+                elif key == 'rg':
+                    value = rg
+                elif key == 'i0':
+                    value = i0
+                elif key == 'chi_sq':
+                    value = chi_sq
+
+                if header in table_dict:
+                    table_dict[header].append(value)
+                else:
+                    table_dict[header] = [value]
+
+    for header, values in table_dict.items():
+        if header in required_data:
+            table_entry = [header]
+            table_entry.extend(values)
+            table_data.append(table_entry)
+        else:
+            if any(val != '' for val in values):
+                table_entry = [header]
+                table_entry.extend(values)
+                table_data.append(table_entry)
+
+    bift_table = Table(table_data)
+
+    table_style = TableStyle(
+        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+        ])
+
+    bift_table.setStyle(table_style)
+    bift_table.hAlign = 'LEFT'
+    bift_table = KeepTogether([bift_text, bift_table])
+
+    return [bift_table]
+
+def generate_dammif_params(dammif_data):
+    styles = getSampleStyleSheet()
+
+    dammif_text = Paragraph('Bead model reconstructions:', styles['Heading2'])
+
+    table_pairs = [
+        ('', 'prefix'),
+        ('Program', 'program'),
+        ('Mode', 'mode'),
+        ('Symmetry', 'sym'),
+        ('Anisometry', 'aniso'),
+        ('Number of reconstructions', 'num'),
+        ('Ran DAMAVER', 'damaver'),
+        ('Ran DAMCLUST', 'damclust'),
+        ('Refined with DAMMIN', 'refined'),
+        ('Mean NSD', 'nsd'),
+        ('Included models', 'included'),
+        ('Resolution (SASRES)', 'res'),
+        ('Representative model', 'rep_model'),
+        ('Number of clusters', 'clusters'),
+        ]
+
+    table_dict = OrderedDict()
+
+    table_data = []
+
+    required_data = ['', 'Program', 'Mode', 'Symmetry', 'Anisometry',
+        'Number of reconstructions', 'Ran DAMAVER', 'Ran DAMCLUST',
+        'Refined with DAMMIN']
+
+
+    for info in dammif_data:
+        if info is not None:
+            for header, key in table_pairs:
+                value = getattr(info, key)
+
+                if value == -1:
+                    value = ''
+
+                else:
+                    if key == 'nsd':
+                        value = '{} +/- {}'.format(text_round(value, 3),
+                            text_round(info.nsd_std, 3))
+                    elif key == 'res':
+                        value = '{} +/- {}'.format(text_round(value, 0),
+                            text_round(info.res_err, 0))
+                    elif key == 'included':
+                        value = '{} of {}'.format(value, info.num)
+                    elif not isinstance(value, str):
+                        value = '{}'.format(value)
+
+                if header in table_dict:
+                    table_dict[header].append(value)
+                else:
+                    table_dict[header] = [value]
+
+    for header, values in table_dict.items():
+        if header in required_data:
+            table_entry = [header]
+            table_entry.extend(values)
+            table_data.append(table_entry)
+        else:
+            if any(val != '' for val in values):
+                table_entry = [header]
+                table_entry.extend(values)
+                table_data.append(table_entry)
+
+    dammif_table = Table(table_data)
+
+    table_style = TableStyle(
+        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+        ])
+
+    dammif_table.setStyle(table_style)
+    dammif_table.hAlign = 'LEFT'
+    dammif_table = KeepTogether([dammif_text, dammif_table])
+
+    return [dammif_table]
 
 def make_figure(figure, caption, img_width, img_height, styles):
     """
     Takes as input matplotlib figure, a string, and image width and height in
     inches and returns a flowable with image and caption thnat will stay together.
     """
+    datadir = os.path.abspath(os.path.expanduser(tempfile.gettempdir()))
+    filename = tempfile.NamedTemporaryFile(dir=datadir).name
+    filename = os.path.split(filename)[-1] + '.png'
+    filename = os.path.join(datadir, filename)
 
-    figure.savefig('fig.png', dpi=300)
-    image = Image('fig.png', img_width*inch, img_height*inch)
+    global temp_files
+    temp_files.append(filename) #Note defined at a module level
+
+    figure.savefig(filename, dpi=300)
+    image = Image(filename, img_width*inch, img_height*inch)
     image.hAlign = 'CENTER'
 
     text = Paragraph(caption, styles['Normal'])

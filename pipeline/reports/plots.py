@@ -34,19 +34,94 @@ class series_overview_plot(object):
         self.int_type = int_type
         self.series_data = series_data
 
+        if len(profiles) > 0:
+            has_profiles = True
+        else:
+            has_profiles = False
+
+        if len(ifts) > 0:
+            has_ifts = True
+        else:
+            has_ifts = False
+
+        if len(series) > 0:
+            has_series = True
+        else:
+            has_series = False
+
         self.figure = plt.figure(figsize=(img_width, img_height))
-        self.gs = self.figure.add_gridspec(3, 2)
 
-        self._make_series_plot()
-        self._make_profile_plot()
-        self._make_guinier_plot()
-        self._make_kratky_plot()
-        self._make_ift_plot()
+        if has_profiles and has_ifts and has_series:
+            self.gs = self.figure.add_gridspec(3, 2)
 
-        self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
-            bottom=0.07, top=0.98, hspace=0.3)
+            self._make_series_plot('a')
+            self._make_profile_plot('b')
+            self._make_guinier_plot('c')
+            self._make_kratky_plot('d')
+            self._make_ift_plot('e')
 
-    def _make_series_plot(self, row=0):
+            self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
+                bottom=0.07, top=0.98, hspace=0.3)
+
+        elif has_profiles and has_ifts and not has_series:
+            self.gs = self.figure.add_gridspec(2, 2)
+
+            self._make_profile_plot('a', row=0)
+            self._make_guinier_plot('b', row=0)
+            self._make_kratky_plot('c', row=1)
+            self._make_ift_plot('d', row=1)
+
+            self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
+                bottom=0.09, top=0.96, hspace=0.3)
+
+        elif has_profiles and not has_ifts and has_series:
+            self.gs = self.figure.add_gridspec(3, 2)
+
+            self._make_series_plot('a')
+            self._make_profile_plot('b', row=1, span=True)
+            self._make_guinier_plot('c', row=2, column=0)
+            self._make_kratky_plot('d', row=2, column=1)
+
+            self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
+                bottom=0.07, top=0.98, hspace=0.3)
+
+        elif has_profiles and not has_ifts and not has_series:
+            self.gs = self.figure.add_gridspec(2, 2)
+
+            self._make_profile_plot('a', row=0, span=True)
+            self._make_guinier_plot('b', row=1, column=0)
+            self._make_kratky_plot('c', row=1, column=1)
+
+            self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
+                bottom=0.10, top=0.97, hspace=0.3)
+
+        elif not has_profiles and has_ifts and has_series:
+            self.gs = self.figure.add_gridspec(2, 2)
+
+            self._make_series_plot('a')
+            self._make_ift_plot('b', row=1, span=True)
+
+            self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
+                bottom=0.09, top=0.97, hspace=0.3)
+
+        elif not has_profiles and not has_ifts and has_series:
+            self.gs = self.figure.add_gridspec(1, 2)
+
+            self._make_series_plot('')
+
+            self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
+                bottom=0.15, top=0.98, hspace=0.3)
+
+        elif not has_profiles and has_ifts and not has_series:
+            self.gs = self.figure.add_gridspec(1, 2)
+
+            self._make_ift_plot('', row=0, span=True)
+
+            self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
+                bottom=0.17, top=0.98, hspace=0.3)
+
+
+    def _make_series_plot(self, label, row=0):
         ax = self.figure.add_subplot(self.gs[row, :])
         ax2 = ax.twinx()
 
@@ -131,11 +206,14 @@ class series_overview_plot(object):
         elif self.series_data == 'MW_Vp':
             ax2.set_ylabel('MW (Vp) [kDa]')
 
-        ax.text(-0.05, 1.0, 'a', transform = ax.transAxes, fontweight='bold',
+        ax.text(-0.05, 1.0, label, transform = ax.transAxes, fontweight='bold',
             size='large')
 
-    def _make_profile_plot(self, row=1, column=0):
-        ax = self.figure.add_subplot(self.gs[row, column])
+    def _make_profile_plot(self, label, row=1, column=0, span=False):
+        if span:
+            ax = self.figure.add_subplot(self.gs[row, :])
+        else:
+            ax = self.figure.add_subplot(self.gs[row, column])
 
         ax.set_yscale('log')
 
@@ -154,10 +232,15 @@ class series_overview_plot(object):
         else:
             ax.set_ylabel('Intensity [Arb.]')
 
-        ax.text(-.15,1.0, 'b', transform = ax.transAxes, fontweight='bold',
+        if span:
+            offset = -0.05
+        else:
+            offset = -0.15
+
+        ax.text(offset, 1.0, label, transform = ax.transAxes, fontweight='bold',
             size='large')
 
-    def _make_guinier_plot(self, row=1, column=1):
+    def _make_guinier_plot(self, label, row=1, column=1):
         gssub = mpl.gridspec.GridSpecFromSubplotSpec(2, 1, self.gs[row, column],
             height_ratios=[1, 0.3], hspace=0.03)
 
@@ -203,10 +286,10 @@ class series_overview_plot(object):
         res_ax.set_xlabel(r'q$^2$ [$\AA^{-2}$]')
         res_ax.set_ylabel(r'$\Delta$I/$\sigma$')
 
-        ax.text(-.15,1.0, 'c', transform = ax.transAxes, fontweight='bold',
+        ax.text(-.15,1.0, label, transform = ax.transAxes, fontweight='bold',
             size='large')
 
-    def _make_kratky_plot(self, row=2, column=0):
+    def _make_kratky_plot(self, label, row=2, column=0):
         ax = self.figure.add_subplot(self.gs[row, column])
 
         ax.axvline(np.sqrt(3), 0, 1, linestyle = 'dashed', color='0.6')
@@ -230,13 +313,16 @@ class series_overview_plot(object):
         ax.set_ylabel(r'(q$R_g$)$^2$I(q)/I(0)')
 
         ymin, ymax = ax.get_ylim()
-        ax.set_ylim(max(-0.1, ymin), ymax)
+        ax.set_ylim(max(-0.1, ymin), min(3, ymax))
 
-        ax.text(-.15,1.0, 'd', transform = ax.transAxes, fontweight='bold',
+        ax.text(-.15,1.0, label, transform = ax.transAxes, fontweight='bold',
             size='large')
 
-    def _make_ift_plot(self, row=2, column=1):
-        ax = self.figure.add_subplot(self.gs[row, column])
+    def _make_ift_plot(self, label, row=2, column=1, span=False):
+        if span:
+            ax = self.figure.add_subplot(self.gs[row, :])
+        else:
+            ax = self.figure.add_subplot(self.gs[row, column])
         ax.axhline(0, color='k')
         # plt.setp(ax.get_yticklabels(), visible=False)
 
@@ -249,7 +335,12 @@ class series_overview_plot(object):
         ax.set_xlabel(r'r [$\AA$]')
         ax.set_ylabel('P(r)/I(0)')
 
-        ax.text(-.15,1.0, 'e', transform = ax.transAxes, fontweight='bold',
+        if span:
+            offset = -0.05
+        else:
+            offset = -0.15
+
+        ax.text(offset, 1.0, label, transform = ax.transAxes, fontweight='bold',
             size='large')
 
 class efa_plot(object):
@@ -277,15 +368,40 @@ class efa_plot(object):
             self.gs = self.figure.add_gridspec(1, 2)
 
         else:
-            self.figure = plt.figure(figsize=(img_width, img_height))
+            if efa_data['profiles'] is None:
+                if img_width == 6 and img_height == 6:
+                    self.figure = plt.figure(figsize=(6, 4))
+                else:
+                    self.figure = plt.figure(figsize=(img_width, img_height))
 
-            self.gs = self.figure.add_gridspec(3, 2)
+                self.gs = self.figure.add_gridspec(2, 2)
+
+            else:
+                self.figure = plt.figure(figsize=(img_width, img_height))
+                self.gs = self.figure.add_gridspec(3, 2)
 
         self._make_series_plot()
         self._make_efa_range_plot()
 
-        self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
-            bottom=0.07, top=0.98, hspace=0.3)
+        if efa_data is not None:
+            self._make_efa_chi_plot()
+            self._make_efa_concentration_plot()
+
+            if efa_data['profiles'] is not None:
+                self._make_efa_profiles_plot()
+
+        if efa_data is not None:
+
+            if efa_data['profiles'] is not None:
+                self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
+                    bottom=0.07, top=0.98, hspace=0.3)
+
+            else:
+                self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
+                    bottom=0.08, top=0.96, hspace=0.23)
+        else:
+            self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
+                bottom=0.16, top=0.93, hspace=0.3)
 
     def _make_series_plot(self, row=0, column=0):
         ax = self.figure.add_subplot(self.gs[row, column])
@@ -312,8 +428,11 @@ class efa_plot(object):
             elif self.series_data == 'MW_Vp':
                 y2_data = self.series.vpmw
 
-        int_line, = ax.plot(x_data, y_data, '-', label=self.series.filename,
-            color='k')
+        start = int(self.series.efa_start)
+        end = int(self.series.efa_end)
+
+        int_line, = ax.plot(x_data, y_data, '-', label=self.series.filename)
+        ax.plot(x_data[start:end+1], y_data[start:end+1], '-', color='k')
 
         if self.series.has_calc_data:
             calc_line, = ax2.plot(x_data[y2_data>0], y2_data[y2_data>0], 'o',
@@ -382,6 +501,55 @@ class efa_plot(object):
             ax.axvline(ranges[i][1], 0, 0.975-0.05*(i), linestyle='dashed',
                 color=color)
 
+        ax.set_xlabel('Frames')
+        ax.set_ylabel('{} Intensity [Arb.]'.format(self.int_type))
+
+        ax.text(-0.15, 1.0, 'b', transform = ax.transAxes, fontweight='bold',
+            size='large')
+
+    def _make_efa_chi_plot(self, row=1, column=0):
+        frames = self.efa_data['data'].frames
+        chi = self.efa_data['data'].chi
+
+        ax = self.figure.add_subplot(self.gs[row, column])
+        ax.plot(frames, chi, '-', color='k')
+
+        ax.set_xlabel('Frames')
+        ax.set_ylabel(r'Mean $\chi^2$')
+
+        ax.text(-0.15, 1.0, 'c', transform = ax.transAxes, fontweight='bold',
+            size='large')
+
+    def _make_efa_concentration_plot(self, row=1, column=1):
+        frames = self.efa_data['data'].frames
+        conc = self.efa_data['data'].conc
+
+        ax = self.figure.add_subplot(self.gs[row, column])
+
+        for i in range(conc.shape[1]):
+            ax.plot(frames, conc[:, i], '-')
+
+        ax.set_xlabel('Frames')
+        ax.set_ylabel('Norm. Concentration')
+
+        ax.text(-0.15, 1.0, 'd', transform = ax.transAxes, fontweight='bold',
+            size='large')
+
+    def _make_efa_profiles_plot(self, row=2):
+        profiles = self.efa_data['profiles']
+
+        ax = self.figure.add_subplot(self.gs[row, :])
+
+        ax.set_yscale('log')
+
+        for profile in profiles:
+            ax.plot(profile.q, profile.i)
+
+        ax.set_xlabel(r'q [$\AA^{-1}$]')
+        ax.set_ylabel('Intensity [Arb.]')
+
+        ax.text(-0.05, 1.0, 'e', transform = ax.transAxes, fontweight='bold',
+            size='large')
 
 def guinier_fit(q, rg, i0):
     return i0*np.exp(-rg**2*q**2/3)

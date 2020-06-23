@@ -32,9 +32,9 @@ GNOMData = collections.namedtuple('GNOM', ['Dmax', 'Rg', 'I0', 'Rg_err',
     defaults=[-1, -1, -1, -1, -1, -1, -1, '', -1, -1])
 
 Metadata = collections.namedtuple('Metadata', ['Sample_to_detector_distance',
-    'Wavelength', 'Exposure_time', 'Exposure_period', 'Flow_rate',
-    'Detector', 'Instrument', 'Absolute_scale'], defaults=[-1, -1, -1, -1, -1,
-    '', '', False])
+    'Wavelength', 'Exposure_time', 'Exposure_period', 'Flow_rate', 'Detector',
+    'Instrument', 'Absolute_scale', 'File_prefix', 'Date', 'RAW_version',
+    'q_range'], defaults=[-1, -1, -1, -1, -1, '', '', False, '', '', '', ''])
 
 class SECData(object):
     """
@@ -43,24 +43,25 @@ class SECData(object):
     """
 
     _calib_trans = {
-        'Sample-to-detector distance (mm)'  : 'distance',
-        'Sample_Detector_Distance'          : 'distance',
-        'Wavelength (A)'                    : 'wavelength',
-        'Wavelength'                        : 'wavelength',
+        'Sample-to-detector distance (mm)'  : 'Sample_to_detector_distance',
+        'Sample_Detector_Distance'          : 'Sample_to_detector_distance',
+        'Wavelength (A)'                    : 'Wavelength',
+        'Wavelength'                        : 'Wavelength',
         }
 
     _counters_trans = {
-        'Flow rate (ml/min)'        : 'flow',
-        'LC_flow_rate_mL/min'       : 'flow',
-        'Exposure_time/frame_s'     : 'exp_time',
-        'Exposure_period/frame_s'   : 'exp_period',
-        'Instrument'                : 'instrument',
-        'File_prefix'               : 'prefix',
-        'Date'                      : 'date',
+        'Flow rate (ml/min)'        : 'Flow_rate',
+        'LC_flow_rate_mL/min'       : 'Flow_rate',
+        'Exposure time/frame (s)'   : 'Exposure_time',
+        'Exposure_time/frame_s'     : 'Exposure_time',
+        'Exposure_period/frame_s'   : 'Exposure_period',
+        'Instrument'                : 'Instrument',
+        'File_prefix'               : 'File_prefix',
+        'Date'                      : 'Date',
         }
 
     _metadata_trans = {
-        'Detector'  : 'detector',
+        'Detector'  : 'Detector',
         }
 
     def __init__(self, secm):
@@ -112,39 +113,50 @@ class SECData(object):
         self.get_efa_data(secm)
 
     def get_metadata(self, secm):
-        self.metadata = {}
+        metadata_dict = {}
 
         first_prof = secm.getSASM(0)
 
         all_params = first_prof.getAllParameters()
 
-        if 'counters' in all_params:
-            counters = first_prof.getParameter('counters')
-            for key, value in self._counters_trans.items():
-                if key in counters:
-                    self.metadata[value] = counters[key]
+        metadata_dict = {}
 
         if 'calibration_params' in all_params:
             calibration_params = first_prof.getParameter('calibration_params')
 
             for key, value in self._calib_trans.items():
                 if key in calibration_params:
-                    self.metadata[value] = calibration_params[key]
+                    metadata_dict[value] = calibration_params[key]
+
+        if 'counters' in all_params:
+            counters = first_prof.getParameter('counters')
+
+            for key, value in self._counters_trans.items():
+                if key in counters:
+                    metadata_dict[value] = counters[key]
 
         if 'metadata' in all_params:
             metadata = first_prof.getParameter('metadata')
 
             for key, value in self._metadata_trans.items():
                 if key in metadata:
-                    self.metadata[value] = metadata[key]
+                    metadata_dict[value] = metadata[key]
+
+        if 'normalizations' in all_params:
+            normalizations = first_prof.getParameter('normalizations')
+
+            if 'Absolute_scale' in normalizations:
+                metadata_dict['Absolute_scale'] = True
 
         if 'raw_version' in all_params:
-            self.metadata['version'] = all_params['raw_version']
+            metadata_dict['RAW_version'] = all_params['raw_version']
 
         q_i = first_prof.getQ()[0]
         q_f = first_prof.getQ()[-1]
-        self.metadata['q_range'] = '{} to {}'.format(utils.text_round(q_i, 4),
+        metadata_dict['q_range'] = '{} to {}'.format(utils.text_round(q_i, 4),
             utils.text_round(q_f, 2))
+
+        self.metadata = Metadata(**metadata_dict)
 
     def get_efa_data(self, secm):
         analysis_dict = secm.getParameter('analysis')
@@ -204,7 +216,7 @@ class SAXSData(object):
         'MW'                : 'MW',
         'Density'           : 'Density',
         'Q_max'             : 'q_max',
-        'VPorod_corrected'  : 'Porod_volume_corrected',
+        'VPorod_Corrected'  : 'Porod_volume_corrected',
         'VPorod'            : 'Porod_volume',
         'Cutoff'            : 'cutoff'
         }
@@ -292,6 +304,8 @@ class SAXSData(object):
         'Exposure_time/frame_s'     : 'Exposure_time',
         'Exposure_period/frame_s'   : 'Exposure_period',
         'Instrument'                : 'Instrument',
+        'File_prefix'               : 'File_prefix',
+        'Date'                      : 'Date',
         }
 
     _metadata_trans = {
@@ -342,7 +356,7 @@ class SAXSData(object):
             self._normalization_data = {}
 
         self._extract_analysis_data()
-        self._extract_metadata()
+        self._extract_metadata(all_params)
 
     def _extract_analysis_data(self):
         """
@@ -356,10 +370,10 @@ class SAXSData(object):
         """
 
         # Grab Guinier data
+        data_dict = {}
+
         if 'guinier' in self._analysis_data:
             guinier_analysis = self._analysis_data['guinier']
-
-            data_dict = {}
 
             for key, value in self._guinier_trans.items():
                 if key in guinier_analysis:
@@ -395,10 +409,10 @@ class SAXSData(object):
             self.mw_data[value] = data_tuple
 
         # Grab BIFT data
+        data_dict = {}
+
         if 'BIFT' in self._analysis_data:
             bift_analysis = self._analysis_data['BIFT']
-
-            data_dict = {}
 
             for key, value in self._bift_trans.items():
                 if key in bift_analysis:
@@ -407,10 +421,10 @@ class SAXSData(object):
         self.bift_data = BIFTData(**data_dict)
 
         # Grab GNOM data
+        data_dict = {}
+
         if 'GNOM' in self._analysis_data:
             gnom_analysis = self._analysis_data['GNOM']
-
-            data_dict = {}
 
             for key, value in self._gnom_trans.items():
                 if key in gnom_analysis:
@@ -424,7 +438,7 @@ class SAXSData(object):
         self.gnom_data = GNOMData(**data_dict)
 
 
-    def _extract_metadata(self):
+    def _extract_metadata(self, all_params):
         """
         Extracts metadata from the sasm header, calibration_params, metadata,
         and normalizations dictionaries into a named tuple defined at the
@@ -448,6 +462,14 @@ class SAXSData(object):
 
         if 'Absolute_scale' in self._normalization_data:
             metadata_dict['Absolute_scale'] = True
+
+        if 'raw_version' in all_params:
+            metadata_dict['RAW_version'] = all_params['raw_version']
+
+        q_i = self.q[0]
+        q_f = self.q[-1]
+        metadata_dict['q_range'] = '{} to {}'.format(utils.text_round(q_i, 4),
+            utils.text_round(q_f, 2))
 
         self.metadata = Metadata(**metadata_dict)
 
@@ -495,14 +517,52 @@ class IFTData(object):
         self.p = self._p_orig/self.i0
         self.p_err = self._p_err_orig/self.i0
 
+        self.a_score = -1
+        self.a_cats = -1
+        self.a_interp = ''
+
+        self.metadata = Metadata()
+
 class EFAData(object):
     """
     Contains information about EFA that's not contained within the series analysis
     dictionary.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, frames, conc, chi, forward_efa, backward_efa):
+        self.frames = frames
+        self.conc = conc
+        self.chi = chi
+        self.forward_efa = forward_efa
+        self.backward_efa = backward_efa
+        self.n_svals = self.conc.shape[1]
+
+class DammifData(object):
+    """
+    Contains information about DAMMIF run from the .csv file RAW saves.
+    """
+
+    def __init__(self, prefix, program, mode, sym, aniso, num, damaver,
+        damclust, refined, nsd, nsd_std, included, res, res_err, clusters,
+         rep_model):
+
+        self.prefix = prefix
+        self.program = program
+        self.mode = mode
+        self.sym = sym
+        self.aniso = aniso
+        self.num = num
+        self.damaver = damaver
+        self.damclust = damclust
+        self.refined = refined
+        self.nsd = nsd
+        self.nsd_std = nsd_std
+        self.included = included
+        self.res = res
+        self.res_err = res_err
+        self.clusters = clusters
+        self.rep_model = rep_model
+
 
 def parse_efa_file(filename):
     with open(filename, 'r') as f:
@@ -590,8 +650,68 @@ def parse_efa_file(filename):
 
     bck = np.array(bck)
 
-    return frames, conc, chi, fwd, bck
+    efa_data = EFAData(frames, conc, chi, fwd, bck)
+
+    return efa_data
 
 
+def parse_dammif_file(filename):
+    with open(filename, 'r') as f:
+        data = f.readlines()
 
+    prefix = ''
+    program = ''
+    mode = ''
+    sym = ''
+    aniso = ''
+    num = -1
+    damaver = False
+    damclust = False
+    refined = False
+    nsd = -1
+    nsd_std = -1
+    included = -1
+    res = -1
+    res_err = -1
+    clusters = -1
+    rep_model = -1
 
+    for line in data:
+        if 'Program used' in line:
+            program = line.split(':')[-1].strip()
+        elif 'Mode:' in line:
+            mode = line.split(':')[-1].strip()
+        elif 'Symmetry' in line:
+            sym = line.split(':')[-1].strip()
+        elif 'Anisometry' in line:
+            aniso = line.split(':')[-1].strip()
+        elif 'Total number' in line:
+            num = int(line.split(':')[-1].strip())
+        elif 'Used DAMAVER' in line:
+            damaver = bool(line.split(':')[-1].strip())
+        elif 'Reinfed with DAMMIN' in line:
+            refined = bool(line.split(':')[-1].strip())
+        elif 'Used DAMCLUST' in line:
+            damclust = bool(line.split(':')[-1].strip())
+        elif 'Mean NSD' in line:
+            nsd = float(line.split(':')[-1].strip())
+        elif 'Stdev. NSD' in line:
+            nsd_std = float(line.split(':')[-1].strip())
+        elif 'DAMAVER Included' in line:
+            included = int(line.split(':')[-1].strip().split(' ')[0].strip())
+        elif 'Representative mode' in line:
+            rep_model = int(line.split(':')[-1].strip())
+        elif 'Ensemble resolution' in line:
+            res_data = line.split(':')[-1].strip()
+            res = float(res_data.split('+')[0].strip())
+            res_err = float(res_data.split('-')[1].strip().split(' ')[0].strip())
+        elif 'Number of clusters' in line:
+            clusters = int(line.split(':')[-1].strip())
+        elif 'Output prefix' in line:
+            prefix = line.split(':')[-1].strip()
+
+    dammif_data = DammifData(prefix, program, mode, sym, aniso, num, damaver,
+        damclust, refined, nsd, nsd_std, included, res, res_err, clusters,
+        rep_model)
+
+    return dammif_data
