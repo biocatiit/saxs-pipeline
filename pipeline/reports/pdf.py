@@ -6,7 +6,8 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Image, XPreformatted, KeepTogether, TableStyle, CondPageBreak
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Table, Image,
+    XPreformatted, KeepTogether, TableStyle)
 
 import bioxtasraw.RAWAPI as raw
 
