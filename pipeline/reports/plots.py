@@ -18,10 +18,11 @@ def make_patch_spines_invisible(ax):
     for sp in ax.spines.values():
         sp.set_visible(False)
 
-class series_overview_plot(object):
+class overview_plot(object):
     """
-    Makes an overview plot with 4 panels. a) Series intensity and rg.
-    b) Log-lin profiles. c) Normalized Kratky profiles. d) P(r)
+    Makes an overview plot with up to 5 panels. a) Series intensity and rg.
+    b) Log-lin profiles. c) Guinier fits. d) Normalized Kratky profiles. e) P(r).
+    Plot generated depends on what data is input.
     """
 
     def __init__(self, profiles, ifts, series, int_type='Total',
@@ -262,14 +263,14 @@ class series_overview_plot(object):
             n_min = profile.guinier_data.n_min
             n_max = profile.guinier_data.n_max
 
-            ax.plot(profile.q[:n_max]**2, profile.i[:n_max], 'o', markersize=3,
+            ax.plot(profile.q[:n_max+1]**2, profile.i[:n_max+1], 'o', markersize=3,
                 label=profile.filename)
-            ax.plot(profile.q[n_min:n_max]**2, fit[n_min:n_max], '-', color='k')
+            ax.plot(profile.q[n_min:n_max+1]**2, fit[n_min:n_max+1], '-', color='k')
             if n_min > 0:
                 ax.plot(profile.q[:n_min]**2, fit[:n_min], '--', color='0.6')
 
-            res_y = (profile.i[n_min:n_max]-fit[n_min:n_max])/profile.err[n_min:n_max]
-            res_ax.plot(profile.q[n_min:n_max]**2, res_y, 'o', markersize=3)
+            res_y = (profile.i[n_min:n_max+1]-fit[n_min:n_max+1])/profile.err[n_min:n_max+1]
+            res_ax.plot(profile.q[n_min:n_max+1]**2, res_y, 'o', markersize=3)
 
         res_ax.axhline(0, color='0')
 

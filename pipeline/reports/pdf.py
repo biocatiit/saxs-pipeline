@@ -8,8 +8,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Image, XPreformatted, KeepTogether, TableStyle, CondPageBreak
 
-from . import plots
+import bioxtasraw.RAWAPI as raw
 
+from . import plots
 from .utils import text_round as text_round
 from . import data
 
@@ -50,6 +51,7 @@ def generate_report(fname, datadir, profiles, ifts, series, extra_data=None):
             elements.extend(bift)
 
     if (extra_data is not None and 'dammif' in extra_data and
+        len(extra_data['dammif']) > 0 and
         any(dam_data is not None for dam_data in extra_data['dammif'])):
         dammif = generate_dammif_params(extra_data['dammif'])
         elements.extend(dammif)
@@ -205,7 +207,7 @@ def generate_overview(profiles, ifts, series):
         img_height = 0
 
     if img_height > 0:
-        ov_plot = plots.series_overview_plot(profiles, ifts, series,
+        ov_plot = plots.overview_plot(profiles, ifts, series,
             img_width=img_width, img_height=img_height)
 
         ov_figure = make_figure(ov_plot.figure, caption, img_width, img_height,
@@ -657,7 +659,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
 
             # Make EFA plot
-            if extra_data is not None:
+            if extra_data is not None and extra_data['efa'] is not None:
                 extra_efa_data = extra_data['efa'][j]
             else:
                 extra_efa_data = None
@@ -822,7 +824,7 @@ def generate_mw_params(profiles, ifts, series):
         ('Dmax (S&S)', 'dmax'),
         ('M.W. (Bayes) [kDa]', 'mw_bayes'),
         ('Bayes Probability', 'prob'),
-        ('Bayes Confidence Interval', 'ci'),
+        ('Bayes Confidence\nInterval [kDa]', 'ci'),
         ('Bayes C.I. Prob.', 'ci_prob'),
         ('M.W. (Abs.) [kDa]', 'mw_abs'),
         ('M.W. (Ref.) [kDa]', 'mw_ref'),
@@ -898,7 +900,7 @@ def generate_mw_params(profiles, ifts, series):
 
             if mw_val.MW != -1 and mw_val.MW != '':
                 shape = mw_val.Shape
-                dmax = '{}'.format(mw_val.Dmax)
+                dmax = '{}'.format(text_round(mw_val.Dmax, 1))
 
 
         for header, key in table_pairs:
@@ -961,6 +963,7 @@ def generate_gnom_params(profiles, ifts, series):
         ('Chi^2', 'chi_sq'),
         ('Total Estimate', 'te'),
         ('Quality', 'quality'),
+        ('q-range [1/A]', 'q_range'),
         ('Ambiguity score', 'a_score'),
         ('Ambiguity cats.', 'a_cats'),
         ('Ambiguity', 'a_interp'),
@@ -997,6 +1000,9 @@ def generate_gnom_params(profiles, ifts, series):
             chi_sq = '{}'.format(text_round(chi_sq, 3))
             te = '{}'.format(text_round(te, 3))
 
+            q_range = '{} to {}'.format(text_round(ift.q[0], 4),
+                text_round(ift.q[-1], 4))
+
             if ift.a_score != -1:
                 a_score = '{}'.format(text_round(ift.a_score, 2))
                 a_cats = '{}'.format(ift.a_cats, 0)
@@ -1021,6 +1027,8 @@ def generate_gnom_params(profiles, ifts, series):
                     value = te
                 elif key == 'quality':
                     value = quality
+                elif key == 'q_range':
+                    value = q_range
                 elif key == 'a_score':
                     value = a_score
                 elif key == 'a_cats':
@@ -1068,6 +1076,7 @@ def generate_bift_params(profiles, ifts, series):
         ('Rg [A]', 'rg'),
         ('I(0)', 'i0'),
         ('Chi^2', 'chi_sq'),
+        ('q-range [1/A]', 'q_range'),
         ]
 
     table_dict = OrderedDict()
@@ -1100,6 +1109,9 @@ def generate_bift_params(profiles, ifts, series):
 
             chi_sq = '{}'.format(text_round(chi_sq, 3))
 
+            q_range = '{} to {}'.format(text_round(ift.q[0], 4),
+                text_round(ift.q[-1], 4))
+
             for header, key in table_pairs:
                 if key == 'name':
                     value = filename
@@ -1111,6 +1123,8 @@ def generate_bift_params(profiles, ifts, series):
                     value = i0
                 elif key == 'chi_sq':
                     value = chi_sq
+                elif key == 'q_range':
+                    value = q_range
 
                 if header in table_dict:
                     table_dict[header].append(value)
@@ -1244,4 +1258,116 @@ def make_figure(figure, caption, img_width, img_height, styles):
 
     return return_fig
 
+def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
+    efa_data=None, efa_profiles=None, dammif_data=None):
 
+    data_dir = os.path.abspath(os.path.expanduser(data_dir))
+
+    for j in range(len(profiles)):
+        profiles[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
+            profiles[j])))
+
+    for j in range(len(ifts)):
+        ifts[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
+            ifts[j])))
+
+    for j in range(len(series)):
+        series[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
+            series[j])))
+
+    if efa_data is not None:
+        for j in range(len(efa_data)):
+            if efa_data[j] is not None:
+                efa_data[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
+                    efa_data[j])))
+
+    if efa_profiles is not None:
+        for profile_list in efa_profiles:
+            if profile_list is not None:
+                for j in range(len(profile_list)):
+                    profile_list[j] = os.path.abspath(os.path.expanduser(
+                        os.path.join(data_dir, profile_list[j])))
+
+    if dammif_data is not None:
+        for j in range(len(dammif_data)):
+            if dammif_data[j] is not None:
+                dammif_data[j] = os.path.abspath(os.path.expanduser(
+                    os.path.join(data_dir, dammif_data[j])))
+
+
+    profiles = raw.load_profiles(profiles)
+    profile_data = [data.SAXSData(profile) for profile in profiles]
+
+    ifts = raw.load_ifts(ifts)
+    ift_data = [data.IFTData(ift) for ift in ifts]
+
+    for j, ift in enumerate(ift_data):
+        if ift.type == 'GNOM':
+            try:
+                a_score, a_cats, a_interp = raw.ambimeter(ifts[j])
+
+                ift.a_score = a_score
+                ift.a_cats = a_cats
+                ift.a_interp = a_interp
+            except Exception:
+                pass
+
+    series = raw.load_series(series)
+    series_data = [data.SECData(s) for s in series]
+
+    efa_results = []
+
+    if efa_data is not None:
+        for efa_file in efa_data:
+            if efa_file is not None:
+                results = data.parse_efa_file(efa_file)
+            else:
+                results = None
+
+            efa_results.append(results)
+
+
+    efa_profile_results = []
+
+    if efa_profiles is not None:
+        for profile_list in efa_profiles:
+            if profile_list is not None:
+                profs = raw.load_profiles(profile_list)
+                results = [data.SAXSData(prof) for prof in profs]
+            else:
+                results = None
+
+            efa_profile_results.append(results)
+
+
+    dammif_results = []
+
+    if dammif_data is not None:
+        for dammif_file in dammif_data:
+            if dammif_file is not None:
+                results = data.parse_dammif_file(dammif_file)
+            else:
+                results = None
+
+            dammif_results.append(results)
+
+    if efa_data is None or len(efa_data) == 0:
+        efa_input = None
+
+    else:
+        efa_input = []
+
+        for j in range(len(efa_results)):
+            efa_dict = {'data': efa_results[j]}
+
+            if j < len(efa_profile_results):
+                efa_dict['profiles'] = efa_profile_results[j]
+            else:
+                efa_dict['profiles'] = None
+
+            efa_input.append(efa_dict)
+
+    extra_data = {'dammif': dammif_results, 'efa': efa_input}
+
+    generate_report(name, out_dir, profile_data, ift_data, series_data,
+        extra_data)
