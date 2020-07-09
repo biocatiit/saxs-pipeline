@@ -34,7 +34,10 @@ GNOMData = collections.namedtuple('GNOM', ['Dmax', 'Rg', 'I0', 'Rg_err',
 Metadata = collections.namedtuple('Metadata', ['Sample_to_detector_distance',
     'Wavelength', 'Exposure_time', 'Exposure_period', 'Flow_rate', 'Detector',
     'Instrument', 'Absolute_scale', 'File_prefix', 'Date', 'RAW_version',
-    'q_range'], defaults=[-1, -1, -1, -1, -1, '', '', False, '', '', '', ''])
+    'q_range', 'Experiment_type', 'Sample', 'Buffer', 'Temperature',
+    'Loaded_volume', 'Concentration', 'Column', 'Mixer', 'Transmission',
+    'Notes'], defaults=[-1, -1, -1, -1, -1, '', '', False, '', '', '', '',
+    '', '', '', -1, -1, -1, '', '', -1, ''])
 
 class SECData(object):
     """
@@ -50,14 +53,24 @@ class SECData(object):
         }
 
     _counters_trans = {
-        'Flow rate (ml/min)'        : 'Flow_rate',
-        'LC_flow_rate_mL/min'       : 'Flow_rate',
-        'Exposure time/frame (s)'   : 'Exposure_time',
-        'Exposure_time/frame_s'     : 'Exposure_time',
-        'Exposure_period/frame_s'   : 'Exposure_period',
-        'Instrument'                : 'Instrument',
-        'File_prefix'               : 'File_prefix',
-        'Date'                      : 'Date',
+        'Flow rate (ml/min)'            : 'Flow_rate',
+        'LC_flow_rate_mL/min'           : 'Flow_rate',
+        'Exposure time/frame (s)'       : 'Exposure_time',
+        'Exposure_time/frame_s'         : 'Exposure_time',
+        'Exposure_period/frame_s'       : 'Exposure_period',
+        'Instrument'                    : 'Instrument',
+        'File_prefix'                   : 'File_prefix',
+        'Date'                          : 'Date',
+        'Experiment_type'               : 'Experiment_type',
+        'Sample'                        : 'Sample',
+        'Buffer'                        : 'Buffer',
+        'Temperature_C'                 : 'Temperature',
+        'Loaded_volume_uL'              : 'Loaded_volume',
+        'Concentration_mg/ml'           : 'Concentration',
+        'Column'                        : 'Column',
+        'Mixer'                         : 'Mixer',
+        'Nominal_Transmission_12_keV'   : 'Transmission',
+        'Notes'                         : 'Notes',
         }
 
     _metadata_trans = {
@@ -298,14 +311,24 @@ class SAXSData(object):
         }
 
     _counters_trans = {
-        'Flow rate (ml/min)'        : 'Flow_rate',
-        'LC_flow_rate_mL/min'       : 'Flow_rate',
-        'Exposure time/frame (s)'   : 'Exposure_time',
-        'Exposure_time/frame_s'     : 'Exposure_time',
-        'Exposure_period/frame_s'   : 'Exposure_period',
-        'Instrument'                : 'Instrument',
-        'File_prefix'               : 'File_prefix',
-        'Date'                      : 'Date',
+        'Flow rate (ml/min)'            : 'Flow_rate',
+        'LC_flow_rate_mL/min'           : 'Flow_rate',
+        'Exposure time/frame (s)'       : 'Exposure_time',
+        'Exposure_time/frame_s'         : 'Exposure_time',
+        'Exposure_period/frame_s'       : 'Exposure_period',
+        'Instrument'                    : 'Instrument',
+        'File_prefix'                   : 'File_prefix',
+        'Date'                          : 'Date',
+        'Experiment_type'               : 'Experiment_type',
+        'Sample'                        : 'Sample',
+        'Buffer'                        : 'Buffer',
+        'Temperature_C'                 : 'Temperature',
+        'Loaded_volume_uL'              : 'Loaded_volume',
+        'Concentration_mg/ml'           : 'Concentration',
+        'Column'                        : 'Column',
+        'Mixer'                         : 'Mixer',
+        'Nominal_Transmission_12_keV'   : 'Transmission',
+        'Notes'                         : 'Notes',
         }
 
     _metadata_trans = {

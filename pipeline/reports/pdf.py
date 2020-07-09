@@ -419,6 +419,14 @@ def generate_exp_params(profiles, ifts, series):
         ('', 'name'),
         ('Date', 'Date'),
         ('Instrument', 'Instrument'),
+        ('Experiment Type', 'Experiment_type'),
+        ('Column', 'Column'),
+        ('Mixer', 'Mixer'),
+        ('Sample', 'Sample'),
+        ('Buffer', 'Buffer'),
+        ('Temperature [C]', 'Temperature'),
+        ('Loaded volume [uL]', 'Loaded_volume'),
+        ('Concentration [mg/ml]', 'Concentration'),
         ('Detector', 'Detector'),
         ('Wavelength (A)', 'Wavelength'),
         ('Camera length (m)', 'Sample_to_detector_distance'),
@@ -426,7 +434,9 @@ def generate_exp_params(profiles, ifts, series):
         ('Exposure time (s)', 'Exposure_time'),
         ('Exposure period (s)', 'Exposure_period'),
         ('Flow rate (ml/min)', 'Flow_rate'),
+        ('Attenuation', 'Transmission'),
         ('RAW version', 'RAW_version'),
+        ('Notes', 'Notes'),
         ]
 
     table_dict = OrderedDict()
@@ -461,6 +471,13 @@ def generate_exp_params(profiles, ifts, series):
 
             elif key == 'Date':
                 value = ':'.join(value.split(':')[:-1])
+
+            elif key == 'Transmission':
+                if value != -1:
+                    if float(value) == 1:
+                        value = 'None'
+                    else:
+                        value = str(round(1./float(value),4))
 
             else:
                 if value != -1:
