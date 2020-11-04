@@ -677,14 +677,9 @@ def generate_series_params(profiles, ifts, series, extra_data):
             efa_table.hAlign = 'LEFT'
             # efa_table = KeepTogether([efa_table])
 
-
             # Make EFA plot
-            if extra_data is not None and extra_data['efa'] is not None:
-                extra_efa_data = extra_data['efa'][j]
-            else:
-                extra_efa_data = None
 
-            efa_plot = plots.efa_plot(s, extra_efa_data)
+            efa_plot_panel = plots.efa_plot(s)
 
             img_width = 6
             img_height = 2
@@ -697,22 +692,19 @@ def generate_series_params(profiles, ifts, series, extra_data):
                 'the top left, and component number increasing in descending '
                 'order to the right.')
 
-            if extra_efa_data is not None:
+            if s.efa_extra_data:
                 efa_caption = efa_caption + (' c) Mean chi^2 values between the '
                     'fit of the EFA deconvolution and the original data. d) '
                     'Area normalized concentration profiles for each component. '
                     'Colors match the component range colors in b.')
 
-                img_height = 4
+                efa_caption = efa_caption + (' e) Deconvolved scattering '
+                    'profiles. Colors match the component range colors in '
+                    'b and the concentration range colors in d.')
 
-                if extra_efa_data['profiles'] is not None:
-                    efa_caption = efa_caption + (' e) Deconvolved scattering '
-                        'profiles. Colors match the component range colors in '
-                        'b and the concentration range colors in d.')
+                img_height = 6
 
-                    img_height = 6
-
-            efa_figure = make_figure(efa_plot.figure, efa_caption, img_width,
+            efa_figure = make_figure(efa_plot_panel.figure, efa_caption, img_width,
                 img_height, styles)
 
             efa_elements.append(efa_title)
@@ -1279,7 +1271,7 @@ def make_figure(figure, caption, img_width, img_height, styles):
     return return_fig
 
 def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
-    efa_data=None, efa_profiles=None, dammif_data=None):
+    dammif_data=None):
 
     data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
@@ -1294,19 +1286,6 @@ def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
     for j in range(len(series)):
         series[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
             series[j])))
-
-    if efa_data is not None:
-        for j in range(len(efa_data)):
-            if efa_data[j] is not None:
-                efa_data[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
-                    efa_data[j])))
-
-    if efa_profiles is not None:
-        for profile_list in efa_profiles:
-            if profile_list is not None:
-                for j in range(len(profile_list)):
-                    profile_list[j] = os.path.abspath(os.path.expanduser(
-                        os.path.join(data_dir, profile_list[j])))
 
     if dammif_data is not None:
         for j in range(len(dammif_data)):
@@ -1335,31 +1314,6 @@ def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
     series = raw.load_series(series)
     series_data = [data.SECData(s) for s in series]
 
-    efa_results = []
-
-    if efa_data is not None:
-        for efa_file in efa_data:
-            if efa_file is not None:
-                results = data.parse_efa_file(efa_file)
-            else:
-                results = None
-
-            efa_results.append(results)
-
-
-    efa_profile_results = []
-
-    if efa_profiles is not None:
-        for profile_list in efa_profiles:
-            if profile_list is not None:
-                profs = raw.load_profiles(profile_list)
-                results = [data.SAXSData(prof) for prof in profs]
-            else:
-                results = None
-
-            efa_profile_results.append(results)
-
-
     dammif_results = []
 
     if dammif_data is not None:
@@ -1371,23 +1325,7 @@ def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
 
             dammif_results.append(results)
 
-    if efa_data is None or len(efa_data) == 0:
-        efa_input = None
-
-    else:
-        efa_input = []
-
-        for j in range(len(efa_results)):
-            efa_dict = {'data': efa_results[j]}
-
-            if j < len(efa_profile_results):
-                efa_dict['profiles'] = efa_profile_results[j]
-            else:
-                efa_dict['profiles'] = None
-
-            efa_input.append(efa_dict)
-
-    extra_data = {'dammif': dammif_results, 'efa': efa_input}
+    extra_data = {'dammif': dammif_results,}
 
     generate_report(name, out_dir, profile_data, ift_data, series_data,
         extra_data)

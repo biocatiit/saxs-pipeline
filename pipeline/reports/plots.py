@@ -161,9 +161,6 @@ class overview_plot(object):
 
                 lines.append(line2)
 
-
-
-
         if len(self.series) == 1:
             series = self.series[0]
 
@@ -354,17 +351,16 @@ class efa_plot(object):
     b) Log-lin profiles. c) Normalized Kratky profiles. d) P(r)
     """
 
-    def __init__(self, series, efa_data, int_type='Total',
+    def __init__(self, series, int_type='Total',
         series_data='Rg', img_width=6, img_height=6):
 
         self.series = series
-        self.efa_data = efa_data
 
         self.int_type = int_type
         self.series_data = series_data
 
 
-        if efa_data is None:
+        if not series.efa_extra_data:
             if img_width == 6 and img_height == 6:
                 self.figure = plt.figure(figsize=(6, 2))
             else:
@@ -373,37 +369,21 @@ class efa_plot(object):
             self.gs = self.figure.add_gridspec(1, 2)
 
         else:
-            if efa_data['profiles'] is None:
-                if img_width == 6 and img_height == 6:
-                    self.figure = plt.figure(figsize=(6, 4))
-                else:
-                    self.figure = plt.figure(figsize=(img_width, img_height))
-
-                self.gs = self.figure.add_gridspec(2, 2)
-
-            else:
-                self.figure = plt.figure(figsize=(img_width, img_height))
-                self.gs = self.figure.add_gridspec(3, 2)
+            self.figure = plt.figure(figsize=(img_width, img_height))
+            self.gs = self.figure.add_gridspec(3, 2)
 
         self._make_series_plot()
         self._make_efa_range_plot()
 
-        if efa_data is not None:
+        if series.efa_extra_data:
             self._make_efa_chi_plot()
             self._make_efa_concentration_plot()
+            self._make_efa_profiles_plot()
 
-            if efa_data['profiles'] is not None:
-                self._make_efa_profiles_plot()
+        if series.efa_extra_data:
 
-        if efa_data is not None:
-
-            if efa_data['profiles'] is not None:
-                self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
-                    bottom=0.07, top=0.98, hspace=0.3)
-
-            else:
-                self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
-                    bottom=0.08, top=0.96, hspace=0.23)
+            self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
+                bottom=0.07, top=0.98, hspace=0.3)
         else:
             self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
                 bottom=0.16, top=0.93, hspace=0.3)
@@ -513,8 +493,8 @@ class efa_plot(object):
             size='large')
 
     def _make_efa_chi_plot(self, row=1, column=0):
-        frames = self.efa_data['data'].frames
-        chi = self.efa_data['data'].chi
+        frames = self.series.efa_frames
+        chi = self.series.efa_chi
 
         ax = self.figure.add_subplot(self.gs[row, column])
         ax.plot(frames, chi, '-', color='k')
@@ -526,8 +506,8 @@ class efa_plot(object):
             size='large')
 
     def _make_efa_concentration_plot(self, row=1, column=1):
-        frames = self.efa_data['data'].frames
-        conc = self.efa_data['data'].conc
+        frames = self.series.efa_frames
+        conc = self.series.efa_conc
 
         ax = self.figure.add_subplot(self.gs[row, column])
 
@@ -541,7 +521,7 @@ class efa_plot(object):
             size='large')
 
     def _make_efa_profiles_plot(self, row=2):
-        profiles = self.efa_data['profiles']
+        profiles = self.series.efa_profiles
 
         ax = self.figure.add_subplot(self.gs[row, :])
 

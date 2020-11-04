@@ -2,6 +2,8 @@ import collections
 
 import numpy as np
 
+import bioxtasraw.RAWAPI as raw
+
 from . import utils
 
 GuinierData = collections.namedtuple('Guinier', ['Rg', 'I0', 'Rg_err',
@@ -182,6 +184,33 @@ class SECData(object):
             self.efa_start = efa_dict['fstart']
             self.efa_end = efa_dict['fend']
             self.efa_nsvs = efa_dict['nsvs']
+            self.efa_iter_limit = efa_dict['iter_limit']
+            self.efa_method = efa_dict['method']
+            self.efa_profile_type = efa_dict['profile']
+            self.efa_tolerance = efa_dict['tolerance']
+            self.efa_frames = list(range(int(self.efa_start), int(self.efa_end)+1))
+
+            if self.efa_profile_type == 'Subtracted':
+                prof_type = 'sub'
+            elif self.efa_profile_type == 'Unsubtracted':
+                prof_type = 'unsub'
+            elif self.efa_profile_type == 'Basline Corrected':
+                prof_type = 'baseline'
+
+            efa_results = raw.efa(secm, self.efa_ranges, prof_type,
+                int(self.efa_start), int(self.efa_end), self.efa_method,
+                int(self.efa_iter_limit), float(self.efa_tolerance))
+
+            if efa_results[1]:
+                self.efa_extra_data = True
+                self.efa_profiles = [SAXSData(prof) for prof in efa_results[0]]
+                self.efa_conc = efa_results[3]['C']
+                self.efa_chi = efa_results[3]['chisq']
+            else:
+                self.efa_extra_data = False
+                self.efa_profiles = []
+                self.efa_conc = []
+                self.efa_chi = ''
 
         else:
             self.efa_done = False
@@ -189,6 +218,16 @@ class SECData(object):
             self.efa_start = ''
             self.efa_end = ''
             self.efa_nsvs = ''
+            self.efa_iter_limit = ''
+            self.efa_method = ''
+            self.efa_profile = ''
+            self.efa_tolerance = ''
+            self.efa_frames = []
+            self.efa_extra_data = False
+            self.efa_profiles = []
+            self.efa_conc = []
+            self.efa_chi = ''
+
 
 
 
