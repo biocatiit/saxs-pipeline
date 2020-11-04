@@ -152,13 +152,17 @@ class overview_plot(object):
 
             line, = ax.plot(x_data, y_data, '-', label=series.filename)
 
+            lines.append(line)
+
             if series.has_calc_data:
                 line2, = ax2.plot(x_data[y2_data>0], y2_data[y2_data>0], 'o',
                     label='{} {}'.format(series.filename, self.series_data),
                     markersize=1)
 
-            lines.append(line)
-            lines.append(line2)
+                lines.append(line2)
+
+
+
 
         if len(self.series) == 1:
             series = self.series[0]

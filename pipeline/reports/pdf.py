@@ -478,6 +478,8 @@ def generate_exp_params(profiles, ifts, series):
                         value = 'None'
                     else:
                         value = str(round(1./float(value),4))
+                else:
+                    value = ''
 
             else:
                 if value != -1:
