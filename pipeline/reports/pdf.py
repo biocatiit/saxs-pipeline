@@ -57,6 +57,12 @@ def generate_report(fname, datadir, profiles, ifts, series, extra_data=None):
         dammif = generate_dammif_params(extra_data['dammif'])
         elements.extend(dammif)
 
+    if (extra_data is not None and 'denss' in extra_data and
+        len(extra_data['denss']) > 0 and
+        any(dam_data is not None for dam_data in extra_data['denss'])):
+        denss = generate_denss_params(extra_data['denss'])
+        elements.extend(denss)
+
     datadir = os.path.abspath(os.path.expanduser(datadir))
     fname = '{}.pdf'.format(os.path.splitext(fname)[0])
 
@@ -1247,6 +1253,81 @@ def generate_dammif_params(dammif_data):
 
     return [dammif_table]
 
+def generate_denss_params(denss_data):
+    styles = getSampleStyleSheet()
+
+    denss_text = Paragraph('Electron density reconstructions:', styles['Heading2'])
+
+    table_pairs = [
+        ('', 'prefix'),
+        ('Mode', 'mode'),
+        ('Symmetry', 'sym'),
+        ('Symmetry axis', 'sym_axis'),
+        ('Symmetry factpr', 'sym_factor'),
+        ('Number of reconstructions', 'num'),
+        ('Averaged', 'average'),
+        ('Refined', 'refined'),
+        ('Mean RSC', 'rsc'),
+        ('Included models', 'included'),
+        ('Resolution', 'res'),
+        ]
+
+    table_dict = OrderedDict()
+
+    table_data = []
+
+    required_data = ['', 'Mode', 'Symmetry', 'Number of reconstructions',
+        'Averaged', 'Refined']
+
+
+    for info in denss_data:
+        if info is not None:
+            for header, key in table_pairs:
+                value = getattr(info, key)
+
+                if value == -1:
+                    value = ''
+
+                else:
+                    if key == 'rsc':
+                        value = '{} +/- {}'.format(text_round(value, 3),
+                            text_round(info.rsc_std, 3))
+                    elif key == 'res':
+                        value = '{}'.format(text_round(value, 1))
+                    elif key == 'included':
+                        value = '{} of {}'.format(value, info.num)
+                    elif not isinstance(value, str):
+                        value = '{}'.format(value)
+
+                if header in table_dict:
+                    table_dict[header].append(value)
+                else:
+                    table_dict[header] = [value]
+
+    for header, values in table_dict.items():
+        if header in required_data:
+            table_entry = [header]
+            table_entry.extend(values)
+            table_data.append(table_entry)
+        else:
+            if any(val != '' for val in values):
+                table_entry = [header]
+                table_entry.extend(values)
+                table_data.append(table_entry)
+
+    denss_table = Table(table_data)
+
+    table_style = TableStyle(
+        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+        ])
+
+    denss_table.setStyle(table_style)
+    denss_table.hAlign = 'LEFT'
+    denss_table = KeepTogether([denss_text, denss_table])
+
+    return [denss_table]
+
 def make_figure(figure, caption, img_width, img_height, styles):
     """
     Takes as input matplotlib figure, a string, and image width and height in
@@ -1271,7 +1352,7 @@ def make_figure(figure, caption, img_width, img_height, styles):
     return return_fig
 
 def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
-    dammif_data=None):
+    dammif_data=None, denss_data=None):
 
     data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
@@ -1325,13 +1406,25 @@ def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
 
             dammif_results.append(results)
 
-    extra_data = {'dammif': dammif_results,}
+    denss_results = []
+
+    if denss_data is not None:
+        for denss_file in denss_data:
+            if denss_file is not None:
+                results = data.parse_denss_file(denss_file)
+            else:
+                results = None
+
+            denss_results.append(results)
+
+    extra_data = {'dammif': dammif_results, 'denss': denss_results}
 
     generate_report(name, out_dir, profile_data, ift_data, series_data,
         extra_data)
 
 
-def make_report_from_data(name, out_dir, profiles, ifts, series, dammif_data=None):
+def make_report_from_data(name, out_dir, profiles, ifts, series,
+    dammif_data=None, denss_data=None):
 
     profile_data = [data.SAXSData(profile) for profile in profiles]
     ift_data = [data.IFTData(ift) for ift in ifts]
@@ -1352,6 +1445,11 @@ def make_report_from_data(name, out_dir, profiles, ifts, series, dammif_data=Non
         extra_data = {'dammif': dammif_data}
     else:
         extra_data = {'dammif': []}
+
+    if denss_data is not None:
+        extra_data['denss'] = denss_data
+    else:
+        extra_data['denss'] = []
 
     generate_report(name, out_dir, profile_data, ift_data, series_data,
         extra_data)

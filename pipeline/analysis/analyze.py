@@ -8,6 +8,8 @@ import matplotlib as mpl
 import bioxtasraw.RAWAPI as raw
 import bioxtasraw.SASFileIO as SASFileIO
 
+from ..reports import data as report_data
+
 def find_dmax(profile, settings):
     analysis_dict = profile.getParameter('analysis')
     try:
@@ -119,7 +121,6 @@ def calc_mw(profile, settings):
 
 def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     cluster=False, refine=False):
-    print('running dammif')
     #Create individual bead model reconstructions
     filename = ift.getParameter('filename').replace(' ', '_')
     prefix = os.path.splitext(filename)[0][:30]
@@ -162,7 +163,6 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     #Average the bead model reconstructions
     damaver_files = ['{}_{:02d}-1.pdb'.format(prefix, i+1) for i in range(nruns)]
     if average and nruns>1:
-        print('running damaver')
         (mean_nsd, stdev_nsd, rep_model, result_dict, res, res_err,
             res_unit) = raw.damaver(damaver_files, prefix, dammif_dir)
 
@@ -214,8 +214,7 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
             ''])
 
     #Cluster the bead model reconstructions
-    if cluster:
-        print('running damclust')
+    if cluster and nruns > 1:
         cluster_list, distance_list = raw.damclust(damaver_files, prefix,
             dammif_dir)
 
@@ -243,7 +242,6 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     #Refine the bead model
     do_refine = average and refine and nruns > 1
     if do_refine:
-        print('running refinement')
         chi_sq, rg, dmax, mw, ev = raw.dammin(temp_ift, 'refine_{}'.format(prefix),
             dammif_dir, 'Refine', initial_dam='{}_damstart.pdb'.format(prefix),
             write_ift=False, ift_name=ift_name)
@@ -266,18 +264,21 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         ('Output directory:', os.path.abspath(os.path.expanduser(dammif_dir))),
         ('Program used:', 'DAMMIF'), ('Mode:', mode), ('Symmetry:', 'P1'),
         ('Anisometry:', 'Unknown'), ('Total number of reconstructions:', nruns),
-        ('Used DAMAVER:', average), ('Refined with DAMMIN:', do_refine),
-        ('Used DAMCLUST:', cluster),
+        ('Used DAMAVER:', average and nruns>1), ('Refined with DAMMIN:', do_refine),
+        ('Used DAMCLUST:', cluster and nruns>1),
         ]
 
     model_plots = make_dammif_figures(dammif_dir, prefix, nruns, do_refine)
 
     save_path = os.path.join(dammif_dir, '{}_dammif_results.csv'.format(prefix))
 
-    SASFileIO.saveDammixData(save_path, ambi_data, nsd_data, res_data, clust_num,
-        clist_data, dlist_data, model_data, setup_data, model_plots)
+    save_data = SASFileIO.saveDammixData(save_path, ambi_data, nsd_data,
+        res_data, clust_num, clist_data, dlist_data, model_data, setup_data,
+        model_plots)
 
-    return (chi_sq_vals, rg_vals, dmax_vals, mw_vals, ev_vals)
+    dammif_data = report_data.parse_dammif_file(None, save_data.split('\n'))
+
+    return dammif_data
 
 def make_dammif_figures(path, prefix, nruns, refine):
     figures = []
@@ -356,7 +357,6 @@ def make_dammif_figures(path, prefix, nruns, refine):
 
 def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     refine=False):
-    print('running denss')
     #Create individual bead model reconstructions
     filename = ift.getParameter('filename').replace(' ', '_')
     prefix = os.path.splitext(filename)[0]
@@ -398,7 +398,6 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     rsc_data = []
 
     if average and nruns > 1:
-        print('running denss average')
         (average_rho, mean_cor, std_cor, threshold, res, scores,
             fsc) = raw.denss_average(np.array(rhos), side,
             '{}_average'.format(prefix), denss_dir)
@@ -436,8 +435,6 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     do_refine = refine and average and nruns > 1
 
     if do_refine:
-        print('running denss refinement')
-
         (refined_rho, refined_chi_sq, refined_rg, refined_support_vol,
             refined_side, refined_q_fit, refined_I_fit, refined_I_extrap,
             refined_err_extrap, refined_all_chi_sq, refined_all_rg,
@@ -470,6 +467,7 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         ('Total number of reconstructions:', nruns),
         ('Number of electrons in molecule:', ''),
         ('Averaged:', average and nruns > 1),
+        ('Refined:', do_refine),
         ('Symmetry applied:', 'False')
         ]
 
@@ -479,8 +477,12 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     filename = prefix + '_denss_results.csv'
     save_path = os.path.join(denss_dir, filename)
 
-    SASFileIO.saveDenssData(save_path, ambi_data, res_data, model_plots,
-        setup_data, rsc_data, model_data)
+    save_data = SASFileIO.saveDenssData(save_path, ambi_data, res_data,
+        model_plots, setup_data, rsc_data, model_data)
+
+    denss_data = report_data.parse_denss_file(None, save_data.split('\n'))
+
+    return denss_data
 
 def make_denss_figures(iftm, denss_results_list, average_results=None,
     refine_results=None):
@@ -605,17 +607,13 @@ def denss_plot(iftm, denss_results):
     return fig, fig2
 
 def model_free_analysis(profile, settings):
-    print('doing model free analysis')
-    print('running auto Guinier')
     raw_results = raw.auto_guinier(profile, settings=settings)
 
     raw_rg = raw_results[0]
 
     if raw_rg != -1:
-        print('Calculating MW')
         calc_mw(profile, settings)
 
-        print('Calculating Dmax and IFT')
         dmax = find_dmax(profile, settings)
 
         if dmax != -1:
@@ -631,20 +629,28 @@ def model_free_analysis(profile, settings):
     return profile, ift
 
 def model_based_analysis(ift, settings, out_dir, dammif=True, denss=True,
-    dam_runs=5, dam_mode='Fast', dam_aver=True, dam_clust=False,
-    dam_refine=False, denss_runs=5, denss_mode='Fast', denss_aver=True,
+    dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
+    dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
     denss_refine=False):
-    print('doing model based analysis')
     if dammif:
-        run_dammif(ift, settings, out_dir, nruns=dam_runs, mode=dam_mode,
-            average=dam_aver, cluster=dam_clust, refine=dam_refine)
+        dammif_data = run_dammif(ift, settings, out_dir, nruns=dam_runs,
+            mode=dam_mode, average=dam_aver, cluster=dam_clust,
+            refine=dam_refine)
+
+    else:
+        dammif_data = None
 
     if denss:
-        run_denss(ift, settings, out_dir, nruns=denss_runs, mode=denss_mode,
-            average=denss_aver, refine=denss_refine)
+        denss_data = run_denss(ift, settings, out_dir, nruns=denss_runs,
+            mode=denss_mode, average=denss_aver, refine=denss_refine)
+
+    else:
+        denss_data = None
+
+    return dammif_data, denss_data
 
 
-def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=False,
+def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
     denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
     dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
     denss_refine=False):
@@ -663,6 +669,9 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=False,
 
     new_ifts = []
 
+    all_dammif_data = []
+    all_denss_data = []
+
     for i in range(len(profiles)):
         profiles[i], ift = model_free_analysis(profiles[i], raw_settings)
 
@@ -674,27 +683,99 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=False,
                     cut_dam=True)
                 cut_ift = ift_results[0]
 
-                model_based_analysis(cut_ift, raw_settings, out_dir,
-                    dammif=dammif, denss=False, dam_runs=dam_runs,
+                dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
+                    out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
                     dam_aver=dam_aver, dam_clust=dam_clust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
                     denss_aver=denss_aver, denss_refine=denss_refine)
 
+                if dammif_data is not None:
+                    all_dammif_data.append(dammif_data)
+
             if denss:
-                model_based_analysis(ift, raw_settings, out_dir,
+                _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
                     dammif=False, denss=denss, dam_runs=dam_runs,
                     dam_aver=dam_aver, dam_clust=dam_clust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
                     denss_aver=denss_aver, denss_refine=denss_refine)
 
+                if denss_data is not None:
+                    all_denss_data.append(denss_data)
+
 
     ifts = raw.load_ifts(ifts)
 
     for ift in ifts:
-        model_based_analysis(ift, raw_settings, out_dir, dammif=dammif,
-            denss=denss, dam_runs=dam_runs, dam_aver=dam_aver,
-            dam_clust=dam_clust, dam_refine=dam_refine, denss_runs=denss_runs,
-            denss_aver=denss_aver, denss_refine=denss_refine)
+        dammif_data, denss_data = model_based_analysis(ift, raw_settings,
+            out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
+            dam_aver=dam_aver, dam_clust=dam_clust, dam_refine=dam_refine,
+            denss_runs=denss_runs, denss_aver=denss_aver,
+            denss_refine=denss_refine)
+
+        if dammif_data is not None:
+            all_dammif_data.append(dammif_data)
+
+        if denss_data is not None:
+            all_denss_data.append(denss_data)
+
+    all_ifts = new_ifts + ifts
+
+    return profiles, all_ifts, all_dammif_data, all_denss_data
 
 
-    return profiles, ifts
+def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
+    denss=False, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
+    dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
+    denss_refine=False):
+
+    new_ifts = []
+
+    all_dammif_data = []
+    all_denss_data = []
+
+    for i in range(len(profiles)):
+        profiles[i], ift = model_free_analysis(profiles[i], raw_settings)
+
+        if ift is not None:
+            new_ifts.append(ift)
+
+            if dammif:
+                ift_results = raw.gnom(profiles[i], ift.getParameter('dmax'),
+                    cut_dam=True)
+                cut_ift = ift_results[0]
+
+                dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
+                    out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
+                    dam_aver=dam_aver, dam_clust=dam_clust,
+                    dam_refine=dam_refine, denss_runs=denss_runs,
+                    denss_aver=denss_aver, denss_refine=denss_refine)
+
+                if dammif_data is not None:
+                    all_dammif_data.append(dammif_data)
+
+            if denss:
+                _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
+                    dammif=False, denss=denss, dam_runs=dam_runs,
+                    dam_aver=dam_aver, dam_clust=dam_clust,
+                    dam_refine=dam_refine, denss_runs=denss_runs,
+                    denss_aver=denss_aver, denss_refine=denss_refine)
+
+                if denss_data is not None:
+                    all_denss_data.append(denss_data)
+
+    for ift in ifts:
+        dammif_data, denss_data = model_based_analysis(ift, raw_settings,
+            out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
+            dam_aver=dam_aver, dam_clust=dam_clust, dam_refine=dam_refine,
+            denss_runs=denss_runs, denss_aver=denss_aver,
+            denss_refine=denss_refine)
+
+        if dammif_data is not None:
+            all_dammif_data.append(dammif_data)
+
+        if denss_data is not None:
+            all_denss_data.append(denss_data)
+
+    all_ifts = new_ifts + ifts
+
+    return profiles, all_ifts, all_dammif_data, all_denss_data

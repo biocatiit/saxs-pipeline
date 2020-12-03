@@ -606,7 +606,7 @@ class DammifData(object):
 
     def __init__(self, prefix, program, mode, sym, aniso, num, damaver,
         damclust, refined, nsd, nsd_std, included, res, res_err, clusters,
-         rep_model):
+        rep_model):
 
         self.prefix = prefix
         self.program = program
@@ -624,6 +624,27 @@ class DammifData(object):
         self.res_err = res_err
         self.clusters = clusters
         self.rep_model = rep_model
+
+class DenssDat(object):
+    """
+    Contains information about DENSS run from the .csv file RAW saves.
+    """
+
+    def __init__(self, prefix, mode, sym, sym_axis, sym_factor, num, average,
+        refined, rsc, rsc_std, included, res):
+
+        self.prefix = prefix
+        self.mode = mode
+        self.sym = sym
+        self.sym_axis = sym_axis
+        self.sym_factor = sym_factor
+        self.num = num
+        self.average = average
+        self.refined = refined
+        self.rsc = rsc
+        self.rsc_std = rsc_std
+        self.included = included
+        self.res = res
 
 
 def parse_efa_file(filename):
@@ -717,9 +738,11 @@ def parse_efa_file(filename):
     return efa_data
 
 
-def parse_dammif_file(filename):
-    with open(filename, 'r') as f:
-        data = f.readlines()
+def parse_dammif_file(filename, data=None):
+
+    if filename is not None:
+        with open(filename, 'r') as f:
+            data = f.readlines()
 
     prefix = ''
     program = ''
@@ -750,11 +773,11 @@ def parse_dammif_file(filename):
         elif 'Total number' in line:
             num = int(line.split(':')[-1].strip())
         elif 'Used DAMAVER' in line:
-            damaver = bool(line.split(':')[-1].strip())
-        elif 'Reinfed with DAMMIN' in line:
-            refined = bool(line.split(':')[-1].strip())
+            damaver = (line.split(':')[-1].strip() == 'True')
+        elif 'Refined with DAMMIN' in line:
+            refined = (line.split(':')[-1].strip() == 'True')
         elif 'Used DAMCLUST' in line:
-            damclust = bool(line.split(':')[-1].strip())
+            damclust = (line.split(':')[-1].strip() == 'True')
         elif 'Mean NSD' in line:
             nsd = float(line.split(':')[-1].strip())
         elif 'Stdev. NSD' in line:
@@ -777,3 +800,53 @@ def parse_dammif_file(filename):
         rep_model)
 
     return dammif_data
+
+def parse_denss_file(filename, data=None):
+
+    if filename is not None:
+        with open(filename, 'r') as f:
+            data = f.readlines()
+
+    prefix = ''
+    mode = ''
+    sym = ''
+    sym_factor = -1
+    sym_axis = ''
+    num = -1
+    average = False
+    refined = False
+    rsc = -1
+    rsc_std = -1
+    included = -1
+    res = -1
+
+    for line in data:
+        if 'Mode:' in line:
+            mode = line.split(':')[-1].strip()
+        elif 'Symmetry applied' in line:
+            sym = line.split(':')[-1].strip()
+        elif 'N-fold' in line:
+            sym_factor = int(line.split(':')[-1].strip())
+        elif 'Symmetry axis' in line:
+            sym_axis = line.split(':')[-1].strip()
+        elif 'Total number' in line:
+            num = int(line.split(':')[-1].strip())
+        elif 'Averaged' in line:
+            average = (line.split(':')[-1].strip() == 'True')
+        elif 'Refined:' in line:
+            refined = (line.split(':')[-1].strip() == 'True')
+        elif 'Mean RSC' in line:
+            rsc = float(line.split(':')[-1].strip())
+        elif 'Stdev. RSC' in line:
+            rsc_std = float(line.split(':')[-1].strip())
+        elif 'Number of models included' in line:
+            included = int(line.split(':')[-1].strip().split(' ')[0].strip())
+        elif 'Correlation Resolution' in line:
+            res = float(line.split(':')[-1].strip())
+        elif 'Output prefix' in line:
+            prefix = line.split(':')[-1].strip()
+
+    denss_data = DenssDat(prefix, mode, sym, sym_axis, sym_factor, num, average,
+        refined, rsc, rsc_std, included, res)
+
+    return denss_data
