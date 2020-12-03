@@ -1329,3 +1329,29 @@ def make_report_from_files(name, out_dir, data_dir, profiles, ifts, series,
 
     generate_report(name, out_dir, profile_data, ift_data, series_data,
         extra_data)
+
+
+def make_report_from_data(name, out_dir, profiles, ifts, series, dammif_data=None):
+
+    profile_data = [data.SAXSData(profile) for profile in profiles]
+    ift_data = [data.IFTData(ift) for ift in ifts]
+    series_data = [data.SECData(s) for s in series]
+
+    for j, ift in enumerate(ift_data):
+        if ift.type == 'GNOM':
+            try:
+                a_score, a_cats, a_interp = raw.ambimeter(ifts[j])
+
+                ift.a_score = a_score
+                ift.a_cats = a_cats
+                ift.a_interp = a_interp
+            except Exception:
+                pass
+
+    if dammif_data is not None:
+        extra_data = {'dammif': dammif_data}
+    else:
+        extra_data = {'dammif': []}
+
+    generate_report(name, out_dir, profile_data, ift_data, series_data,
+        extra_data)
