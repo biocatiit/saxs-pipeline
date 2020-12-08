@@ -136,7 +136,7 @@ class monitor_and_load(threading.Thread):
                 if time.time() - initial_t > self.header_timeout:
                     new_failed.append(item)
                 else:
-                    imgs, img_hdrs, counters, fnames = self._load_image_and_counter(img)
+                    imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
 
                     got_new_images = True
 
@@ -148,7 +148,9 @@ class monitor_and_load(threading.Thread):
                         new_counters.extend(counters)
                         new_fnames.extend(fnames)
 
-                if len(imgs) > self.ret_every:
+                if len(imgs) >= self.ret_every:
+                    print(new_imgs[0])
+                    print(type(new_imgs[0]))
                     self._ret_q.put_nowait([new_imgs, new_img_hdrs,
                         new_counters, new_fnames])
                     new_imgs = []
@@ -181,7 +183,7 @@ class monitor_and_load(threading.Thread):
                 if self._abort_event.is_set():
                     break
 
-                imgs, img_hdrs, counters, fnames = self._load_image_and_counter(img)
+                imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
 
                 if len(imgs) > 0:
                     new_imgs.extend(imgs)
@@ -194,7 +196,7 @@ class monitor_and_load(threading.Thread):
                 else:
                     self.waiting_for_header.append((img, time.time()))
 
-                if len(imgs) > self.ret_every:
+                if len(imgs) >= self.ret_every:
                     self._ret_q.put_nowait([new_imgs, new_img_hdrs,
                         new_counters, new_fnames])
                     new_imgs = []
@@ -212,8 +214,8 @@ class monitor_and_load(threading.Thread):
                 new_fnames = []
 
             if new_imgs:
-                self._ret_q.put_nowait([new_imgs, new_img_hdrs, new_counters,
-                    new_fnames])
+                self._ret_q.put_nowait([new_imgs, new_fnames, new_img_hdrs,
+                    new_counters])
 
             if not got_new_images:
                 time.sleep(0.1)
@@ -235,7 +237,7 @@ class monitor_and_load(threading.Thread):
         except SASExceptions.HeaderLoadError:
             imgs = img_hdrs = counters = fnames = []
 
-        return imgs, img_hdrs, counters, fnames
+        return imgs, fnames, img_hdrs, counters
 
     def _abort(self):
         self._monitor_abort.set()
@@ -333,8 +335,8 @@ class monitor_thread(threading.Thread):
             if os.path.splitext(f)[1] in self.img_exts:
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
-        if new_images:
-            print(new_images)
+        # if new_images:
+        #     print(new_images)
 
         return new_images
 
@@ -350,6 +352,113 @@ class monitor_thread(threading.Thread):
         """Stops the thread cleanly."""
         self._stop_event.set()
 
+
+class raver_process(multiprocessing.Process):
+
+    def __init__(self, cmd_q, ret_q, cmd_lock, ret_lock, abort_event,
+        raw_settings_file):
+        multiprocessing.Process.__init__(self)
+        self.daemon = True
+
+        self._cmd_q = cmd_q
+        self._ret_q = ret_q
+        self._cmd_lock = cmd_lock
+        self._ret_lock = ret_lock
+        self._abort_event = abort_event
+        self._stop_event = multiprocessing.Event()
+
+        self.raw_settings = raw.load_settings(raw_settings_file)
+
+        self._commands = {'raver_images': self._raver_images,
+            }
+
+        self.ret_every = 10
+
+    def run(self):
+        while True:
+            if self._stop_event.is_set():
+                break
+
+            if self._abort_event.is_set():
+                self._abort()
+
+            try:
+                with self._cmd_lock:
+                    cmd, args, kwargs = self._cmd_q.get_nowait()
+            except queue.Empty:
+                cmd = None
+
+            if cmd is not None:
+                print(cmd)
+                self._commands[cmd](*args, **kwargs)
+
+            else:
+                time.sleep(0.1)
+
+    def _raver_images(self, *args, **kwargs):
+
+        img_hdrs = []
+        all_counters = []
+        load_path = ''
+
+        imgs = args[0]
+        if len(args) >1:
+            names = args[1]
+        if len(args) > 2:
+            img_hdrs = args[2]
+        if len(args) > 3:
+            all_counters = args[3]
+
+
+        if 'img_hdrs' in kwargs:
+            img_hdrs = kwargs['img_hdrs']
+        if 'all_counters' in kwargs:
+            all_counters = kwargs['all_counters']
+        if 'names' in kwargs:
+            names = kwargs['names']
+        if 'load_path' in kwargs:
+            load_path = kwargs['load_path']
+
+        profiles = []
+
+        for i, image in enumerate(imgs):
+            try:
+                img_hdr = img_hdrs[i]
+            except Exception:
+                img_hdr = {}
+            try:
+                counters = all_counters[i]
+            except Exception:
+                counters = {}
+
+            name = names[i]
+
+            profile = raw.integrate_image(image, self.raw_settings, name,
+                img_hdr=img_hdr, counters=counters, load_path=load_path)
+
+            profiles.append(profile)
+
+            if len(profiles) >= self.ret_every:
+                with self._ret_lock:
+                    self._ret_q.put_nowait(profiles)
+                profiles = []
+
+        if len(profiles) > 0:
+            with self._ret_lock:
+                self._ret_q.put_nowait(profiles)
+
+    def _abort(self):
+        while True:
+            try:
+                with self._cmd_lock:
+                    cmd, args, kwargs = self._cmd_q.get_nowait()
+            except queue.Empty:
+                break
+
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        self._stop_event.set()
 
 
 """

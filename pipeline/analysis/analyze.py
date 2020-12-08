@@ -1038,17 +1038,14 @@ class analysis_process(multiprocessing.Process):
             self._ret_q.put_nowait(results)
 
     def _abort(self):
-        # self._cmd_q.clear()
-        # self._ret_q.clear()
-
-        # self._abort_event.clear()
-        pass
+        while True:
+            try:
+                with self._cmd_lock:
+                    cmd, args, kwargs = self._cmd_q.get_nowait()
+            except queue.Empty:
+                break
 
     def stop(self):
         """Stops the thread cleanly."""
         self._stop_event.set()
 
-
-"""
-Need a way to abort during dammif/denss runs.
-"""
