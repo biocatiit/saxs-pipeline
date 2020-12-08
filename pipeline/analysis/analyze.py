@@ -1,5 +1,10 @@
 import os
 import copy
+import multiprocessing
+import time
+import queue
+import traceback
+import threading
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,7 +15,7 @@ import bioxtasraw.SASFileIO as SASFileIO
 
 from ..reports import data as report_data
 
-def find_dmax(profile, settings):
+def find_dmax(profile, settings, use_atsas=True, single_proc=True):
     analysis_dict = profile.getParameter('analysis')
     try:
         rg = float(analysis_dict['guinier']['Rg'])
@@ -25,7 +30,7 @@ def find_dmax(profile, settings):
         except Exception:
             dc_dmax = -1
 
-        if dc_dmax == -1:
+        if dc_dmax == -1 and use_atsas:
             try:
                 dc_mw, dc_shape, dc_dmax = raw.mw_datclass(profile)
             except Exception:
@@ -46,16 +51,21 @@ def find_dmax(profile, settings):
                     (bift, bift_dmax, bift_rg, bift_i0, bift_dmax_err,
                     bift_rg_err, bift_i0_err, bift_chi_sq, bift_log_alpha,
                     bift_log_alpha_err, bift_evidence,
-                    bift_evidence_err) = raw.bift(profile, settings=settings)
+                    bift_evidence_err) = raw.bift(profile, settings=settings,
+                    single_proc=single_proc)
                 except Exception:
+                    traceback.print_exc()
                     bift_dmax = -1
 
             #Calculate the IFT using DATGNOM
-            try:
-                (datgnom_ift, datgnom_dmax, datgnom_rg, datgnom_i0,
-                datgnom_rg_err, datgnom_i0_err, datgnom_total_est,
-                datgnom_chi_sq, datgnom_alpha, datgnom_quality) = raw.datgnom(profile)
-            except Exception:
+            if use_atsas:
+                try:
+                    (datgnom_ift, datgnom_dmax, datgnom_rg, datgnom_i0,
+                    datgnom_rg_err, datgnom_i0_err, datgnom_total_est,
+                    datgnom_chi_sq, datgnom_alpha, datgnom_quality) = raw.datgnom(profile)
+                except Exception:
+                    datgnom_dmax = -1
+            else:
                 datgnom_dmax = -1
 
             if bift_dmax != -1 and datgnom_dmax != -1:
@@ -73,7 +83,7 @@ def find_dmax(profile, settings):
             if dmax != -1:
                 dmax = round(dmax)
 
-        if dmax != -1:
+        if dmax != -1 and use_atsas:
             # Refine if Dmax is too long
             ift_results = raw.gnom(profile, dmax)
             ift = ift_results[0]
@@ -100,7 +110,7 @@ def find_dmax(profile, settings):
 
     return dmax
 
-def calc_mw(profile, settings):
+def calc_mw(profile, settings, use_atsas=True):
     if 'Conc' in profile.getAllParameters():
         try:
             conc = float(profile.getParameter('Conc'))
@@ -116,11 +126,13 @@ def calc_mw(profile, settings):
 
     raw.mw_vp(profile, settings=settings)
     raw.mw_vc(profile, settings=settings)
-    raw.mw_bayes(profile)
-    raw.mw_datclass(profile)
+
+    if use_atsas:
+        raw.mw_bayes(profile)
+        raw.mw_datclass(profile)
 
 def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
-    cluster=False, refine=False):
+    cluster=False, refine=False, abort_event=threading.Event()):
     #Create individual bead model reconstructions
     filename = ift.getParameter('filename').replace(' ', '_')
     prefix = os.path.splitext(filename)[0][:30]
@@ -129,6 +141,10 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     temp_ift.setParameter('filename', prefix+'.out')
 
     dammif_dir = os.path.join(out_dir, os.path.splitext(filename)[0]+'_dammif')
+
+    if abort_event.is_set():
+        return None
+
     if not os.path.exists(dammif_dir):
         os.mkdir(dammif_dir)
     else:
@@ -149,9 +165,12 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     raw.save_ift(temp_ift, datadir=dammif_dir)
 
     for i in range(nruns):
+        if abort_event.is_set():
+            break
+
         chi_sq, rg, dmax, mw, ev = raw.dammif(temp_ift,
             '{}_{:02d}'.format(prefix, i+1), dammif_dir, mode=mode,
-            write_ift=write_ift, ift_name=ift_name)
+            write_ift=write_ift, ift_name=ift_name, abort_event=abort_event)
 
         chi_sq_vals.append(chi_sq)
         rg_vals.append(rg)
@@ -160,11 +179,15 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         ev_vals.append(ev)
 
 
+    if abort_event.is_set():
+        return None
+
     #Average the bead model reconstructions
     damaver_files = ['{}_{:02d}-1.pdb'.format(prefix, i+1) for i in range(nruns)]
     if average and nruns>1:
         (mean_nsd, stdev_nsd, rep_model, result_dict, res, res_err,
-            res_unit) = raw.damaver(damaver_files, prefix, dammif_dir)
+            res_unit) = raw.damaver(damaver_files, prefix, dammif_dir,
+                abort_event=abort_event)
 
         nsd_inc = 0
         ex_items = []
@@ -175,7 +198,11 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
             else:
                 ex_items.append(key)
 
-        r_num = int(os.path.splitext(rep_model)[0].split('_')[-1].split('-')[0])
+        if rep_model != '':
+            r_num = int(os.path.splitext(rep_model)[0].split('_')[-1].split('-')[0])
+        else:
+            r_num = -1
+
         nsd_data = [('Mean NSD:', mean_nsd),
                 ('Stdev. NSD:', stdev_nsd),
                 ('DAMAVER Included:', nsd_inc, 'of', nruns),
@@ -190,6 +217,9 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     else:
         nsd_data = []
         res_data = []
+
+    if abort_event.is_set():
+        return None
 
     for i, name in enumerate(damaver_files):
         if average and nruns>1:
@@ -216,7 +246,7 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     #Cluster the bead model reconstructions
     if cluster and nruns > 1:
         cluster_list, distance_list = raw.damclust(damaver_files, prefix,
-            dammif_dir)
+            dammif_dir, abort_event=abort_event)
 
         clust_num = ('Number of clusters:', len(cluster_list))
 
@@ -239,12 +269,15 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         clist_data = []
         dlist_data = []
 
+    if abort_event.is_set():
+        return None
+
     #Refine the bead model
     do_refine = average and refine and nruns > 1
     if do_refine:
         chi_sq, rg, dmax, mw, ev = raw.dammin(temp_ift, 'refine_{}'.format(prefix),
             dammif_dir, 'Refine', initial_dam='{}_damstart.pdb'.format(prefix),
-            write_ift=False, ift_name=ift_name)
+            write_ift=False, ift_name=ift_name, abort_event=abort_event)
 
         chi_sq_vals.append(chi_sq)
         rg_vals.append(rg)
@@ -253,6 +286,9 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         ev_vals.append(ev)
 
         model_data.append(['refine', chi_sq, rg, dmax, ev, mw, ''])
+
+    if abort_event.is_set():
+        return None
 
     ambi_score, ambi_cats, ambi_eval = raw.ambimeter(temp_ift, datadir=dammif_dir,
         write_ift=False, filename=ift_name)
@@ -356,12 +392,16 @@ def make_dammif_figures(path, prefix, nruns, refine):
     return figures
 
 def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
-    refine=False):
+    refine=False, single_proc=True, abort_event=threading.Event()):
     #Create individual bead model reconstructions
     filename = ift.getParameter('filename').replace(' ', '_')
     prefix = os.path.splitext(filename)[0]
 
     denss_dir = os.path.join(out_dir, os.path.splitext(filename)[0]+'_denss')
+
+    if abort_event.is_set():
+        return None
+
     if not os.path.exists(denss_dir):
         os.mkdir(denss_dir)
     else:
@@ -379,9 +419,13 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     denss_results = []
 
     for i in range(nruns):
+        if abort_event.is_set():
+            break
+        print('running denss')
         (rho, chi_sq, rg, support_vol, side, q_fit, I_fit, I_extrap,
             err_extrap, all_chi_sq, all_rg, all_support_vol) = raw.denss(ift,
-            '{}_{:02d}'.format(prefix, i+1), denss_dir, mode=mode)
+            '{}_{:02d}'.format(prefix, i+1), denss_dir, mode=mode,
+            abort_event=abort_event)
 
         rhos.append(rho)
         chi_vals.append(chi_sq)
@@ -394,13 +438,23 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
             all_chi_sq, all_rg, all_support_vol])
 
 
+    if abort_event.is_set():
+        return None
+
     #Average the electron reconstructions
     rsc_data = []
 
     if average and nruns > 1:
+        if single_proc:
+            n_proc=1
+        else:
+            n_proc = multiprocessing.cpu_count()
+
+        print('running average')
         (average_rho, mean_cor, std_cor, threshold, res, scores,
             fsc) = raw.denss_average(np.array(rhos), side,
-            '{}_average'.format(prefix), denss_dir)
+            '{}_average'.format(prefix), denss_dir, n_proc=n_proc,
+            abort_event=abort_event)
 
         rsc_data.append(('Mean RSC:', round(mean_cor, 4)))
         rsc_data.append(('Stdev. RSC:', round(std_cor, 4)))
@@ -408,7 +462,8 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         rsc_data.append(('Total number of models:', nruns))
 
         if np.sum(scores<=threshold) > 0:
-            rsc_data.append(('Excluded Models:', ' ,'.join(np.argwhere(scores<=threshold))))
+            rsc_data.append(('Excluded Models:', ' ,'.join(map(str,
+                np.argwhere(scores<=threshold)))))
 
         res_data = [('Fourier Shell Correlation Resolution (Angstrom):', res)]
 
@@ -419,6 +474,9 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         res_data = []
 
         average_results = None
+
+    if abort_event.is_set():
+        return None
 
     model_data = []
 
@@ -450,6 +508,9 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
 
     else:
         refined_results = None
+
+    if abort_event.is_set():
+        return None
 
     if ift.getParameter('algorithm') == 'GNOM':
         ambi_score, ambi_cats, ambi_eval = raw.ambimeter(ift)
@@ -606,20 +667,38 @@ def denss_plot(iftm, denss_results):
 
     return fig, fig2
 
-def model_free_analysis(profile, settings):
+def model_free_analysis(profile, settings, use_atsas=True, single_proc=True,
+    abort_event=threading.Event()):
+
+    if abort_event.is_set():
+        return profile, None
+
     raw_results = raw.auto_guinier(profile, settings=settings)
+
+    if abort_event.is_set():
+        return profile, None
 
     raw_rg = raw_results[0]
 
     if raw_rg != -1:
-        calc_mw(profile, settings)
+        calc_mw(profile, settings, use_atsas)
 
-        dmax = find_dmax(profile, settings)
+        if abort_event.is_set():
+            return profile, None
 
-        if dmax != -1:
+        dmax = find_dmax(profile, settings, use_atsas, single_proc)
+
+        if abort_event.is_set():
+            return profile, None
+
+        if dmax != -1 and use_atsas:
             ift_results = raw.gnom(profile, dmax)
             ift = ift_results[0]
 
+        elif dmax != -1 and not use_atsas:
+            ift_results = raw.bift(profile, settings=settings,
+                single_proc=single_proc)
+            ift = ift_results[0]
         else:
             ift = None
 
@@ -631,18 +710,27 @@ def model_free_analysis(profile, settings):
 def model_based_analysis(ift, settings, out_dir, dammif=True, denss=True,
     dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
     dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
-    denss_refine=False):
-    if dammif:
+    denss_refine=False, use_atsas=True, single_proc=True,
+    abort_event=threading.Event()):
+
+    if abort_event.is_set():
+        return None, None
+
+    if dammif and use_atsas:
         dammif_data = run_dammif(ift, settings, out_dir, nruns=dam_runs,
             mode=dam_mode, average=dam_aver, cluster=dam_clust,
-            refine=dam_refine)
+            refine=dam_refine, abort_event=abort_event)
 
     else:
         dammif_data = None
 
+    if abort_event.is_set():
+        return dammif_data, None
+
     if denss:
         denss_data = run_denss(ift, settings, out_dir, nruns=denss_runs,
-            mode=denss_mode, average=denss_aver, refine=denss_refine)
+            mode=denss_mode, average=denss_aver, refine=denss_refine,
+            single_proc=single_proc, abort_event=abort_event)
 
     else:
         denss_data = None
@@ -653,7 +741,8 @@ def model_based_analysis(ift, settings, out_dir, dammif=True, denss=True,
 def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
     denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
     dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
-    denss_refine=False):
+    denss_refine=False, use_atsas=True, single_proc=True,
+    abort_event=threading.Event()):
     data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
     for j in range(len(profiles)):
@@ -664,6 +753,9 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
         ifts[j] = os.path.abspath(os.path.expanduser(os.path.join(data_dir,
             ifts[j])))
 
+    if abort_event.is_set():
+        return [], [], [], []
+
     profiles = raw.load_profiles(profiles)
 
 
@@ -673,12 +765,19 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
     all_denss_data = []
 
     for i in range(len(profiles)):
-        profiles[i], ift = model_free_analysis(profiles[i], raw_settings)
+        if abort_event.is_set():
+            break
+
+        profiles[i], ift = model_free_analysis(profiles[i], raw_settings,
+            use_atsas, single_proc, abort_event)
+
+        if abort_event.is_set():
+            break
 
         if ift is not None:
             new_ifts.append(ift)
 
-            if dammif:
+            if dammif and use_atsas:
                 ift_results = raw.gnom(profiles[i], ift.getParameter('dmax'),
                     cut_dam=True)
                 cut_ift = ift_results[0]
@@ -687,30 +786,42 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
                     out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
                     dam_aver=dam_aver, dam_clust=dam_clust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
-                    denss_aver=denss_aver, denss_refine=denss_refine)
+                    denss_aver=denss_aver, denss_refine=denss_refine,
+                    use_atsas=use_atsas, abort_event=abort_event)
 
                 if dammif_data is not None:
                     all_dammif_data.append(dammif_data)
+
+            if abort_event.is_set():
+                break
 
             if denss:
                 _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
                     dammif=False, denss=denss, dam_runs=dam_runs,
                     dam_aver=dam_aver, dam_clust=dam_clust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
-                    denss_aver=denss_aver, denss_refine=denss_refine)
+                    denss_aver=denss_aver, denss_refine=denss_refine,
+                    use_atsas=use_atsas, abort_event=abort_event)
 
                 if denss_data is not None:
                     all_denss_data.append(denss_data)
 
 
+    if abort_event.is_set():
+        return profiles, new_ifts, all_dammif_data, all_denss_data
+
     ifts = raw.load_ifts(ifts)
 
     for ift in ifts:
+        if abort_event.is_set():
+            break
+
         dammif_data, denss_data = model_based_analysis(ift, raw_settings,
             out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
             dam_aver=dam_aver, dam_clust=dam_clust, dam_refine=dam_refine,
             denss_runs=denss_runs, denss_aver=denss_aver,
-            denss_refine=denss_refine)
+            denss_refine=denss_refine, use_atsas=use_atsas,
+            abort_event=abort_event)
 
         if dammif_data is not None:
             all_dammif_data.append(dammif_data)
@@ -724,9 +835,10 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
 
 
 def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
-    denss=False, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
+    denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
     dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
-    denss_refine=False):
+    denss_refine=False, use_atsas=True, single_proc=True,
+    abort_event=threading.Event()):
 
     new_ifts = []
 
@@ -734,12 +846,19 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
     all_denss_data = []
 
     for i in range(len(profiles)):
-        profiles[i], ift = model_free_analysis(profiles[i], raw_settings)
+        if abort_event.is_set():
+            break
+
+        profiles[i], ift = model_free_analysis(profiles[i], raw_settings,
+            use_atsas, single_proc, abort_event)
+
+        if abort_event.is_set():
+            break
 
         if ift is not None:
             new_ifts.append(ift)
 
-            if dammif:
+            if dammif and use_atsas:
                 ift_results = raw.gnom(profiles[i], ift.getParameter('dmax'),
                     cut_dam=True)
                 cut_ift = ift_results[0]
@@ -748,27 +867,39 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
                     out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
                     dam_aver=dam_aver, dam_clust=dam_clust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
-                    denss_aver=denss_aver, denss_refine=denss_refine)
+                    denss_aver=denss_aver, denss_refine=denss_refine,
+                    use_atsas=use_atsas, abort_event=abort_event)
 
                 if dammif_data is not None:
                     all_dammif_data.append(dammif_data)
+
+            if abort_event.is_set():
+                break
 
             if denss:
                 _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
                     dammif=False, denss=denss, dam_runs=dam_runs,
                     dam_aver=dam_aver, dam_clust=dam_clust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
-                    denss_aver=denss_aver, denss_refine=denss_refine)
+                    denss_aver=denss_aver, denss_refine=denss_refine,
+                    use_atsas=use_atsas, abort_event=abort_event)
 
                 if denss_data is not None:
                     all_denss_data.append(denss_data)
 
+    if abort_event.is_set():
+        return profiles, new_ifts, all_dammif_data, all_denss_data
+
     for ift in ifts:
+        if abort_event.is_set():
+            break
+
         dammif_data, denss_data = model_based_analysis(ift, raw_settings,
             out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
             dam_aver=dam_aver, dam_clust=dam_clust, dam_refine=dam_refine,
             denss_runs=denss_runs, denss_aver=denss_aver,
-            denss_refine=denss_refine)
+            denss_refine=denss_refine, use_atsas=use_atsas,
+            abort_event=abort_event)
 
         if dammif_data is not None:
             all_dammif_data.append(dammif_data)
@@ -779,3 +910,145 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
     all_ifts = new_ifts + ifts
 
     return profiles, all_ifts, all_dammif_data, all_denss_data
+
+
+class analysis_process(multiprocessing.Process):
+
+    def __init__(self, cmd_q, ret_q, cmd_lock, ret_lock, abort_event,
+        raw_settings_file):
+        multiprocessing.Process.__init__(self)
+        self.daemon = True
+
+        self._cmd_q = cmd_q
+        self._ret_q = ret_q
+        self._cmd_lock = cmd_lock
+        self._ret_lock = ret_lock
+        self._abort_event = abort_event
+        self._stop_event = multiprocessing.Event()
+
+        self.raw_settings = raw.load_settings(raw_settings_file)
+
+        self._commands = {'process_profile': self._proc_profile,
+            'process_ift': self._proc_ift}
+
+    def run(self):
+        while True:
+            if self._stop_event.is_set():
+                break
+
+            if self._abort_event.is_set():
+                self._abort()
+
+            try:
+                with self._cmd_lock:
+                    cmd, args, kwargs = self._cmd_q.get_nowait()
+            except queue.Empty:
+                cmd = None
+
+            if cmd is not None:
+                print(cmd)
+                self._commands[cmd](*args, **kwargs)
+
+            else:
+                time.sleep(0.1)
+
+    def _proc_profile(self, *args, **kwargs):
+
+        out_dir = args[0]
+        profile = args[1]
+
+        profiles = [profile]
+        ifts = []
+
+        kwargs['single_proc'] = True
+        kwargs['abort_event'] = self._abort_event
+
+        profiles, ifts, dammif_data, denss_data = analyze_data(out_dir,
+            profiles, ifts, self.raw_settings, **kwargs)
+
+        if profiles:
+            profile = profiles[0]
+        else:
+            profile = []
+
+        if ifts:
+            ift = ifts[0]
+        else:
+            ift = []
+
+        if dammif_data:
+            dammif_data = dammif_data[0]
+        else:
+            dammif_data = []
+
+        if denss_data:
+            denss_data = denss_data[0]
+        else:
+            denss_data = []
+
+        results = {'profile': profile,
+            'ift': ift,
+            'dammif_data': dammif_data,
+            'denss_data': denss_data,
+            }
+
+        with self._ret_lock:
+            self._ret_q.put_nowait(results)
+
+    def _proc_ift(self, *args, **kwargs):
+        out_dir = args[0]
+        ift = args[1]
+
+        profiles = []
+        ifts = [ift]
+
+        kwargs['single_proc'] = True
+        kwargs['abort_event'] = self._abort_event
+
+        profiles, ifts, dammif_data, denss_data = analyze_data(out_dir,
+            profiles, ifts, self.raw_settings, **kwargs)
+
+        if profiles:
+            profile = profiles[0]
+        else:
+            profile = []
+
+        if ifts:
+            ift = ifts[0]
+        else:
+            ift = []
+
+        if dammif_data:
+            dammif_data = dammif_data[0]
+        else:
+            dammif_data = []
+
+        if denss_data:
+            denss_data = denss_data[0]
+        else:
+            denss_data = []
+
+        results = {'profile': profile,
+            'ift': ift,
+            'dammif_data': dammif_data,
+            'denss_data': denss_data,
+            }
+
+        with self._ret_lock:
+            self._ret_q.put_nowait(results)
+
+    def _abort(self):
+        # self._cmd_q.clear()
+        # self._ret_q.clear()
+
+        # self._abort_event.clear()
+        pass
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        self._stop_event.set()
+
+
+"""
+Need a way to abort during dammif/denss runs.
+"""
