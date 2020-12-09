@@ -54,7 +54,6 @@ def find_dmax(profile, settings, use_atsas=True, single_proc=True):
                     bift_evidence_err) = raw.bift(profile, settings=settings,
                     single_proc=single_proc)
                 except Exception:
-                    traceback.print_exc()
                     bift_dmax = -1
 
             #Calculate the IFT using DATGNOM
@@ -421,7 +420,6 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     for i in range(nruns):
         if abort_event.is_set():
             break
-        print('running denss')
         (rho, chi_sq, rg, support_vol, side, q_fit, I_fit, I_extrap,
             err_extrap, all_chi_sq, all_rg, all_support_vol) = raw.denss(ift,
             '{}_{:02d}'.format(prefix, i+1), denss_dir, mode=mode,
@@ -450,7 +448,6 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         else:
             n_proc = multiprocessing.cpu_count()
 
-        print('running average')
         (average_rho, mean_cor, std_cor, threshold, res, scores,
             fsc) = raw.denss_average(np.array(rhos), side,
             '{}_average'.format(prefix), denss_dir, n_proc=n_proc,
@@ -834,10 +831,10 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
     return profiles, all_ifts, all_dammif_data, all_denss_data
 
 
-def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
-    denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
-    dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
-    denss_refine=False, use_atsas=True, single_proc=True,
+def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
+    dammif=True, denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True,
+    dam_clust=False, dam_refine=False, denss_runs=3, denss_mode='Fast',
+    denss_aver=True, denss_refine=False, use_atsas=True, single_proc=True,
     abort_event=threading.Event()):
 
     new_ifts = []
@@ -852,6 +849,13 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
         profiles[i], ift = model_free_analysis(profiles[i], raw_settings,
             use_atsas, single_proc, abort_event)
 
+        if save_processed:
+            if profiles[i] is not None:
+                raw.save_profile(profiles[i], datadir=out_dir,
+                    settings=raw_settings)
+            if ift is not None:
+                raw.save_ift(ift, datadir=out_dir)
+
         if abort_event.is_set():
             break
 
@@ -859,9 +863,13 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, dammif=True,
             new_ifts.append(ift)
 
             if dammif and use_atsas:
-                ift_results = raw.gnom(profiles[i], ift.getParameter('dmax'),
-                    cut_dam=True)
+                ift_results = raw.gnom(copy.deepcopy(profiles[i]),
+                    ift.getParameter('dmax'), cut_dam=True)
                 cut_ift = ift_results[0]
+                fname = cut_ift.getParameter('filename')
+                name, ext = os.path.splitext(fname)
+                fname = '{}_cut{}'.format(name, ext)
+                cut_ift.setParameter('filename', fname)
 
                 dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
                     out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
@@ -929,7 +937,11 @@ class analysis_process(multiprocessing.Process):
         self.raw_settings = raw.load_settings(raw_settings_file)
 
         self._commands = {'process_profile': self._proc_profile,
-            'process_ift': self._proc_ift}
+            'process_ift': self._proc_ift,
+            'make_and_subtract_series': self._make_and_subtract_series_cmd,
+            'make_and_analyze_series': self._make_and_analyze_series,
+            'load_settings': self._load_settings,
+            }
 
     def run(self):
         while True:
@@ -956,86 +968,134 @@ class analysis_process(multiprocessing.Process):
 
         out_dir = args[0]
         profile = args[1]
+        save_processed = args[2]
 
         profiles = [profile]
         ifts = []
 
-        kwargs['single_proc'] = True
-        kwargs['abort_event'] = self._abort_event
-
-        profiles, ifts, dammif_data, denss_data = analyze_data(out_dir,
-            profiles, ifts, self.raw_settings, **kwargs)
-
-        if profiles:
-            profile = profiles[0]
-        else:
-            profile = []
-
-        if ifts:
-            ift = ifts[0]
-        else:
-            ift = []
-
-        if dammif_data:
-            dammif_data = dammif_data[0]
-        else:
-            dammif_data = []
-
-        if denss_data:
-            denss_data = denss_data[0]
-        else:
-            denss_data = []
-
-        results = {'profile': profile,
-            'ift': ift,
-            'dammif_data': dammif_data,
-            'denss_data': denss_data,
-            }
+        results = self._proc_data(profiles, ifts, out_dir, save_processed,
+            **kwargs)
 
         with self._ret_lock:
-            self._ret_q.put_nowait(results)
+            self._ret_q.put_nowait(['analysis_results', results])
 
     def _proc_ift(self, *args, **kwargs):
         out_dir = args[0]
         ift = args[1]
+        save_processed = args[2]
 
         profiles = []
         ifts = [ift]
 
+        results = self._proc_data(profiles, ifts, out_dir, save_processed,
+            **kwargs)
+
+        with self._ret_lock:
+            self._ret_q.put_nowait(['analysis_results', results])
+
+    def _proc_data(self, profiles, ifts, out_dir, save_processed, **kwargs):
         kwargs['single_proc'] = True
         kwargs['abort_event'] = self._abort_event
 
         profiles, ifts, dammif_data, denss_data = analyze_data(out_dir,
-            profiles, ifts, self.raw_settings, **kwargs)
+            profiles, ifts, self.raw_settings, save_processed, **kwargs)
 
         if profiles:
             profile = profiles[0]
         else:
-            profile = []
+            profile = None
 
         if ifts:
             ift = ifts[0]
         else:
-            ift = []
+            ift = None
 
         if dammif_data:
             dammif_data = dammif_data[0]
         else:
-            dammif_data = []
+            dammif_data = None
 
         if denss_data:
             denss_data = denss_data[0]
         else:
-            denss_data = []
+            denss_data = None
 
         results = {'profile': profile,
             'ift': ift,
             'dammif_data': dammif_data,
             'denss_data': denss_data,
+            'out_dir': out_dir,
             }
 
+        # if save_processed:
+        #     if profile is not None:
+        #         raw.save_profile(profile, datadir=out_dir,
+        #             settings=self.raw_settings)
+        #     if ift is not None:
+        #         raw.save_ift(ift, datadir=out_dir)
+
+        return results
+
+    def _make_and_subtract_series_cmd(self, *args, **kwargs):
+        out_dir = args[0]
+        profiles = args[1]
+        save_processed = args[2]
+
+        series, sub_profile = self._make_and_subtract_series(profiles, out_dir,
+            save_processed)
+
         with self._ret_lock:
-            self._ret_q.put_nowait(results)
+            self._ret_q.put_nowait(['sub_series', series, sub_profile])
+
+    def _make_and_analyze_series(self, *args, **kwargs):
+        out_dir = args[0]
+        profiles = args[1]
+        save_processed = args[2]
+
+        series, sub_profile = self._make_and_subtract_series(profiles, out_dir,
+            save_processed)
+
+        with self._ret_lock:
+            self._ret_q.put_nowait(['sub_series', series, sub_profile])
+
+        if sub_profile is not None:
+            results = self._proc_data([sub_profile], [], out_dir,
+                save_processed, **kwargs)
+
+            with self._ret_lock:
+                self._ret_q.put_nowait(['analysis_results', results])
+
+
+    def _make_and_subtract_series(self, profiles, out_dir, save_processed):
+        profiles.sort(key=lambda prof: int(prof.getParameter('filename').split('.')[0].split('_')[-1]))
+
+        series = raw.profiles_to_series(profiles, self.raw_settings)
+
+        success, start, end = raw.find_buffer_range(series,
+            settings=self.raw_settings)
+
+        if success:
+            raw.set_buffer_range(series, [[start, end]],
+                settings=self.raw_settings)
+
+            success, start, end = raw.find_sample_range(series,
+                settings=self.raw_settings)
+
+            if success:
+                sub_profile = raw.set_sample_range(series, [[start, end]])
+            else:
+                sub_profile = None
+
+        else:
+            sub_profile = None
+
+        if save_processed:
+            raw.save_series(series, datadir=out_dir)
+
+        return series, sub_profile
+
+    def _load_settings(self, settings_file):
+        self.raw_settings = raw.load_settings(settings_file)
 
     def _abort(self):
         while True:
@@ -1049,3 +1109,9 @@ class analysis_process(multiprocessing.Process):
         """Stops the thread cleanly."""
         self._stop_event.set()
 
+
+"""
+I should return processed profiles and IFTs as soon as their finished, so they
+can be saved and looked at without waiting for dammif/denss to run. Or just
+save them in the analysis function?
+"""

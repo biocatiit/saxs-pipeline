@@ -72,7 +72,7 @@ def load_images_and_counters(filenames, settings):
 
 class monitor_and_load(threading.Thread):
 
-    def __init__(self, cmd_q, ret_q, abort_event, raw_settings_file,
+    def __init__(self, cmd_q, ret_q, abort_event, raw_settings,
         pipeline_settings):
         threading.Thread.__init__(self)
         self.daemon = True
@@ -82,7 +82,7 @@ class monitor_and_load(threading.Thread):
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
-        self.raw_settings = raw.load_settings(raw_settings_file)
+        self.raw_settings = raw_settings
         self.pipeline_settings = pipeline_settings
 
         self._monitor_cmd_q = collections.deque()
@@ -370,6 +370,7 @@ class raver_process(multiprocessing.Process):
         self.raw_settings = raw.load_settings(raw_settings_file)
 
         self._commands = {'raver_images': self._raver_images,
+            'load_settings': self._load_settings,
             }
 
         self.ret_every = 10
@@ -447,6 +448,9 @@ class raver_process(multiprocessing.Process):
             with self._ret_lock:
                 self._ret_q.put_nowait(profiles)
 
+    def _load_settings(self, settings_file):
+        self.raw_settings = raw.load_settings(settings_file)
+
     def _abort(self):
         while True:
             try:
@@ -455,11 +459,9 @@ class raver_process(multiprocessing.Process):
             except queue.Empty:
                 break
 
-
     def stop(self):
         """Stops the thread cleanly."""
         self._stop_event.set()
-
 
 """
 To do:
