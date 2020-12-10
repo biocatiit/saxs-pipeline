@@ -6,3 +6,4 @@ Requires:
 - matplotlib
 - reportlab
 - bioxtasraw (installed as a package, for API)
+- watchdog

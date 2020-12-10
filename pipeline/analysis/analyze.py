@@ -705,7 +705,7 @@ def model_free_analysis(profile, settings, use_atsas=True, single_proc=True,
     return profile, ift
 
 def model_based_analysis(ift, settings, out_dir, dammif=True, denss=True,
-    dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
+    dam_runs=3, dam_mode='Fast', damaver=True, damclust=False,
     dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
     denss_refine=False, use_atsas=True, single_proc=True,
     abort_event=threading.Event()):
@@ -715,7 +715,7 @@ def model_based_analysis(ift, settings, out_dir, dammif=True, denss=True,
 
     if dammif and use_atsas:
         dammif_data = run_dammif(ift, settings, out_dir, nruns=dam_runs,
-            mode=dam_mode, average=dam_aver, cluster=dam_clust,
+            mode=dam_mode, average=damaver, cluster=damclust,
             refine=dam_refine, abort_event=abort_event)
 
     else:
@@ -736,7 +736,7 @@ def model_based_analysis(ift, settings, out_dir, dammif=True, denss=True,
 
 
 def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
-    denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True, dam_clust=False,
+    denss=True, dam_runs=3, dam_mode='Fast', damaver=True, damclust=False,
     dam_refine=False, denss_runs=3, denss_mode='Fast', denss_aver=True,
     denss_refine=False, use_atsas=True, single_proc=True,
     abort_event=threading.Event()):
@@ -781,7 +781,7 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
 
                 dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
                     out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
-                    dam_aver=dam_aver, dam_clust=dam_clust,
+                    damaver=damaver, damclust=damclust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
                     denss_aver=denss_aver, denss_refine=denss_refine,
                     use_atsas=use_atsas, abort_event=abort_event)
@@ -795,7 +795,7 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
             if denss:
                 _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
                     dammif=False, denss=denss, dam_runs=dam_runs,
-                    dam_aver=dam_aver, dam_clust=dam_clust,
+                    damaver=damaver, damclust=damclust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
                     denss_aver=denss_aver, denss_refine=denss_refine,
                     use_atsas=use_atsas, abort_event=abort_event)
@@ -815,7 +815,7 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
 
         dammif_data, denss_data = model_based_analysis(ift, raw_settings,
             out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
-            dam_aver=dam_aver, dam_clust=dam_clust, dam_refine=dam_refine,
+            damaver=damaver, damclust=damclust, dam_refine=dam_refine,
             denss_runs=denss_runs, denss_aver=denss_aver,
             denss_refine=denss_refine, use_atsas=use_atsas,
             abort_event=abort_event)
@@ -832,8 +832,8 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
 
 
 def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
-    dammif=True, denss=True, dam_runs=3, dam_mode='Fast', dam_aver=True,
-    dam_clust=False, dam_refine=False, denss_runs=3, denss_mode='Fast',
+    dammif=True, denss=True, dam_runs=3, dam_mode='Fast', damaver=True,
+    damclust=False, dam_refine=False, denss_runs=3, denss_mode='Fast',
     denss_aver=True, denss_refine=False, use_atsas=True, single_proc=True,
     abort_event=threading.Event()):
 
@@ -873,7 +873,7 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
 
                 dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
                     out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
-                    dam_aver=dam_aver, dam_clust=dam_clust,
+                    damaver=damaver, damclust=damclust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
                     denss_aver=denss_aver, denss_refine=denss_refine,
                     use_atsas=use_atsas, abort_event=abort_event)
@@ -887,7 +887,7 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
             if denss:
                 _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
                     dammif=False, denss=denss, dam_runs=dam_runs,
-                    dam_aver=dam_aver, dam_clust=dam_clust,
+                    damaver=damaver, damclust=damclust,
                     dam_refine=dam_refine, denss_runs=denss_runs,
                     denss_aver=denss_aver, denss_refine=denss_refine,
                     use_atsas=use_atsas, abort_event=abort_event)
@@ -904,7 +904,7 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
 
         dammif_data, denss_data = model_based_analysis(ift, raw_settings,
             out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
-            dam_aver=dam_aver, dam_clust=dam_clust, dam_refine=dam_refine,
+            damaver=damaver, damclust=damclust, dam_refine=dam_refine,
             denss_runs=denss_runs, denss_aver=denss_aver,
             denss_refine=denss_refine, use_atsas=use_atsas,
             abort_event=abort_event)
@@ -940,7 +940,6 @@ class analysis_process(multiprocessing.Process):
             'process_ift': self._proc_ift,
             'make_and_subtract_series': self._make_and_subtract_series_cmd,
             'make_and_analyze_series': self._make_and_analyze_series,
-            'load_settings': self._load_settings,
             }
 
     def run(self):
@@ -953,18 +952,18 @@ class analysis_process(multiprocessing.Process):
 
             try:
                 with self._cmd_lock:
-                    cmd, args, kwargs = self._cmd_q.get_nowait()
+                    cmd, exp_id, args, kwargs = self._cmd_q.get_nowait()
             except queue.Empty:
                 cmd = None
 
             if cmd is not None:
                 print(cmd)
-                self._commands[cmd](*args, **kwargs)
+                self._commands[cmd](exp_id, *args, **kwargs)
 
             else:
                 time.sleep(0.1)
 
-    def _proc_profile(self, *args, **kwargs):
+    def _proc_profile(self, exp_id, *args, **kwargs):
 
         out_dir = args[0]
         profile = args[1]
@@ -977,9 +976,9 @@ class analysis_process(multiprocessing.Process):
             **kwargs)
 
         with self._ret_lock:
-            self._ret_q.put_nowait(['analysis_results', results])
+            self._ret_q.put_nowait(['analysis_results', exp_id, results])
 
-    def _proc_ift(self, *args, **kwargs):
+    def _proc_ift(self, exp_id, *args, **kwargs):
         out_dir = args[0]
         ift = args[1]
         save_processed = args[2]
@@ -991,7 +990,7 @@ class analysis_process(multiprocessing.Process):
             **kwargs)
 
         with self._ret_lock:
-            self._ret_q.put_nowait(['analysis_results', results])
+            self._ret_q.put_nowait(['analysis_results', exp_id, results])
 
     def _proc_data(self, profiles, ifts, out_dir, save_processed, **kwargs):
         kwargs['single_proc'] = True
@@ -1027,16 +1026,9 @@ class analysis_process(multiprocessing.Process):
             'out_dir': out_dir,
             }
 
-        # if save_processed:
-        #     if profile is not None:
-        #         raw.save_profile(profile, datadir=out_dir,
-        #             settings=self.raw_settings)
-        #     if ift is not None:
-        #         raw.save_ift(ift, datadir=out_dir)
-
         return results
 
-    def _make_and_subtract_series_cmd(self, *args, **kwargs):
+    def _make_and_subtract_series_cmd(self, exp_id, *args, **kwargs):
         out_dir = args[0]
         profiles = args[1]
         save_processed = args[2]
@@ -1045,9 +1037,9 @@ class analysis_process(multiprocessing.Process):
             save_processed)
 
         with self._ret_lock:
-            self._ret_q.put_nowait(['sub_series', series, sub_profile])
+            self._ret_q.put_nowait(['sub_series', exp_id, series, sub_profile])
 
-    def _make_and_analyze_series(self, *args, **kwargs):
+    def _make_and_analyze_series(self, exp_id, *args, **kwargs):
         out_dir = args[0]
         profiles = args[1]
         save_processed = args[2]
@@ -1056,18 +1048,18 @@ class analysis_process(multiprocessing.Process):
             save_processed)
 
         with self._ret_lock:
-            self._ret_q.put_nowait(['sub_series', series, sub_profile])
+            self._ret_q.put_nowait(['sub_series', exp_id, series, sub_profile])
 
         if sub_profile is not None:
             results = self._proc_data([sub_profile], [], out_dir,
                 save_processed, **kwargs)
 
             with self._ret_lock:
-                self._ret_q.put_nowait(['analysis_results', results])
+                self._ret_q.put_nowait(['analysis_results', exp_id, results])
 
 
     def _make_and_subtract_series(self, profiles, out_dir, save_processed):
-        profiles.sort(key=lambda prof: int(prof.getParameter('filename').split('.')[0].split('_')[-1]))
+        profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
 
         series = raw.profiles_to_series(profiles, self.raw_settings)
 
@@ -1094,7 +1086,7 @@ class analysis_process(multiprocessing.Process):
 
         return series, sub_profile
 
-    def _load_settings(self, settings_file):
+    def load_settings(self, settings_file):
         self.raw_settings = raw.load_settings(settings_file)
 
     def _abort(self):

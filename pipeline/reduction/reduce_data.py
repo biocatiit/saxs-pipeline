@@ -37,38 +37,43 @@ def load_images_and_counters(filenames, settings):
     img_hdr_list = []
     counter_list = []
     filename_list = []
+    failed = []
 
     for fname in filenames:
         imgs, img_hdrs = raw.load_images(filenames, settings)
 
-        img_list.extend(imgs)
-        img_hdr_list.extend(img_hdrs)
+        if all(map(lambda img: img is not None, imgs)):
+            img_list.extend(imgs)
+            img_hdr_list.extend(img_hdrs)
 
-        new_fnames = []
+            new_fnames = []
 
-        for i in range(len(imgs)):
-            if len(imgs) > 1:
-                temp_fname = os.path.split(fname)[1].split('.')
-                if len(temp_fname) > 1:
-                    temp_fname[-2] = temp_fname[-2] + '_%05i' %(i+1)
+            for i in range(len(imgs)):
+                if len(imgs) > 1:
+                    temp_fname = os.path.split(fname)[1].split('.')
+                    if len(temp_fname) > 1:
+                        temp_fname[-2] = temp_fname[-2] + '_%05i' %(i+1)
+                    else:
+                        temp_fname[0] = temp_fname[0] + '_%05i' %(i+1)
+
+                    new_fname = '.'.join(temp_fname)
                 else:
-                    temp_fname[0] = temp_fname[0] + '_%05i' %(i+1)
-
-                new_fname = '.'.join(temp_fname)
-            else:
-                new_fname = os.path.split(fname)[1]
+                    new_fname = os.path.split(fname)[1]
 
 
-            new_fnames.append(new_fname)
+                new_fnames.append(new_fname)
 
-        counters = raw.load_counter_values([fname for n in new_fnames],
-            settings, new_fnames)
+            counters = raw.load_counter_values([fname for n in new_fnames],
+                settings, new_fnames)
 
-        counter_list.extend(counters)
+            counter_list.extend(counters)
 
-        filename_list.extend(new_fnames)
+            filename_list.extend(new_fnames)
 
-    return img_list, img_hdr_list, counter_list, filename_list
+        else:
+            failed.append(fname)
+
+    return img_list, img_hdr_list, counter_list, filename_list, failed
 
 class monitor_and_load(threading.Thread):
 
@@ -87,15 +92,17 @@ class monitor_and_load(threading.Thread):
 
         self._monitor_cmd_q = collections.deque()
         self._monitor_ret_q = collections.deque()
-        # self._monitor_cmd_q = queue.Queue()
-        # self._monitor_ret_q = queue.Queue()
         self._monitor_abort = threading.Event()
         self._monitor_thread = monitor_thread(self._monitor_cmd_q,
             self._monitor_ret_q, self._monitor_abort, self.pipeline_settings)
         self._monitor_thread.start()
 
-        self._commands = {'set_data_dir': self._set_data_dir,
-            'set_ret_size': self._set_ret_size}
+        self._commands = {'set_data_dir'    : self._set_data_dir,
+            'set_fprefix': self._set_fprefix,
+            'set_data_dir_and_fprefix': self._set_data_dir_fprefix,
+            'set_ret_size'  : self._set_ret_size,
+            'set_raw_settings'  : self._set_raw_settings,
+            }
 
         self.waiting_for_header = []
         self.failed = []
@@ -108,8 +115,8 @@ class monitor_and_load(threading.Thread):
                 break
 
             try:
-                cmd, args = self._cmd_q.get_nowait()
-            except queue.Empty:
+                cmd, args = self._cmd_q.popleft()
+            except IndexError:
                 cmd = None
 
             if cmd is not None:
@@ -151,7 +158,7 @@ class monitor_and_load(threading.Thread):
                 if len(imgs) >= self.ret_every:
                     print(new_imgs[0])
                     print(type(new_imgs[0]))
-                    self._ret_q.put_nowait([new_imgs, new_img_hdrs,
+                    self._ret_q.append([new_imgs, new_img_hdrs,
                         new_counters, new_fnames])
                     new_imgs = []
                     new_img_hdrs = []
@@ -197,7 +204,7 @@ class monitor_and_load(threading.Thread):
                     self.waiting_for_header.append((img, time.time()))
 
                 if len(imgs) >= self.ret_every:
-                    self._ret_q.put_nowait([new_imgs, new_img_hdrs,
+                    self._ret_q.append([new_imgs, new_img_hdrs,
                         new_counters, new_fnames])
                     new_imgs = []
                     new_img_hdrs = []
@@ -214,7 +221,7 @@ class monitor_and_load(threading.Thread):
                 new_fnames = []
 
             if new_imgs:
-                self._ret_q.put_nowait([new_imgs, new_fnames, new_img_hdrs,
+                self._ret_q.append([new_imgs, new_fnames, new_img_hdrs,
                     new_counters])
 
             if not got_new_images:
@@ -222,6 +229,12 @@ class monitor_and_load(threading.Thread):
 
     def _set_data_dir(self, data_dir):
         self._monitor_cmd_q.append(['set_data_dir', [data_dir,]])
+
+    def _set_fprefix(self, fprefix):
+        self._monitor_cmd_q.append(['set_fprefix', [fprefix,]])
+
+    def _set_data_dir_fprefix(self, data_dir, fprefix):
+        self._monitor_cmd_q.append(['set_data_dir_and_fprefix', [data_dir, fprefix]])
 
     def _set_ret_size(self, size):
         self.ret_every = int(size)
@@ -232,21 +245,25 @@ class monitor_and_load(threading.Thread):
             file_size = os.path.getsize(img_name)
 
         try:
-            imgs, img_hdrs, counters, fnames = load_images_and_counters([img_name,],
+            imgs, img_hdrs, counters, fnames, failed = load_images_and_counters([img_name,],
                 self.raw_settings)
         except SASExceptions.HeaderLoadError:
-            imgs = img_hdrs = counters = fnames = []
+            imgs = img_hdrs = counters = fnames = failed = []
+
+        if len(failed) > 0:
+            print('\n\n\n*********************FAILED***********************\n\n\n')
+            print(failed)
 
         return imgs, fnames, img_hdrs, counters
+
+    def _set_raw_settings(self, settings):
+        self.raw_settings = settings
 
     def _abort(self):
         self._monitor_abort.set()
 
-        while True:
-            try:
-                self._cmd_q.get_nowait()
-            except queue.Empty:
-                break
+        self._cmd_q.clear()
+        self._ret_q.clear()
 
         self._monitor_cmd_q.clear()
         self._monitor_ret_q.clear()
@@ -274,12 +291,15 @@ class monitor_thread(threading.Thread):
         self._stop_event = threading.Event()
 
         self.pipeline_settings = pipeline_settings
-        self.img_exts = self.pipeline_settings.get('image_exts')
+        self.img_exts = self.pipeline_settings['image_exts']
+        self.fprefix = ''
 
         self.data_dir = None
         self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
 
-        self._commands = {'set_data_dir': self._set_data_dir}
+        self._commands = {'set_data_dir': self._set_data_dir,
+            'set_fprefix': self._set_fprefix,
+            'set_data_dir_and_fprefix': self._set_data_dir_fprefix}
 
     def run(self):
         while True:
@@ -317,6 +337,13 @@ class monitor_thread(threading.Thread):
 
         self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
 
+    def _set_fprefix(self, fprefix):
+        self.fprefix = fprefix
+
+    def _set_data_dir_fprefix(self, data_dir, fprefix):
+        self._set_fprefix(fprefix)
+        self._set_data_dir(data_dir)
+
     def _check_for_new_files(self):
 
         new_snapshot = dirsnapshot.DirectorySnapshot(self.data_dir, False)
@@ -332,7 +359,8 @@ class monitor_thread(threading.Thread):
                 new_images = []
                 self._abort()
 
-            if os.path.splitext(f)[1] in self.img_exts:
+            if (os.path.splitext(f)[1] in self.img_exts
+                and os.path.split(f)[1].startswith(self.fprefix)):
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
         # if new_images:
@@ -370,7 +398,6 @@ class raver_process(multiprocessing.Process):
         self.raw_settings = raw.load_settings(raw_settings_file)
 
         self._commands = {'raver_images': self._raver_images,
-            'load_settings': self._load_settings,
             }
 
         self.ret_every = 10
@@ -385,19 +412,18 @@ class raver_process(multiprocessing.Process):
 
             try:
                 with self._cmd_lock:
-                    cmd, args, kwargs = self._cmd_q.get_nowait()
+                    cmd, exp_id, args, kwargs = self._cmd_q.get_nowait()
             except queue.Empty:
                 cmd = None
 
             if cmd is not None:
                 print(cmd)
-                self._commands[cmd](*args, **kwargs)
+                self._commands[cmd](exp_id, *args, **kwargs)
 
             else:
                 time.sleep(0.1)
 
-    def _raver_images(self, *args, **kwargs):
-
+    def _raver_images(self, exp_id, *args, **kwargs):
         img_hdrs = []
         all_counters = []
         load_path = ''
@@ -441,14 +467,14 @@ class raver_process(multiprocessing.Process):
 
             if len(profiles) >= self.ret_every:
                 with self._ret_lock:
-                    self._ret_q.put_nowait(profiles)
+                    self._ret_q.put_nowait([exp_id, profiles])
                 profiles = []
 
         if len(profiles) > 0:
             with self._ret_lock:
-                self._ret_q.put_nowait(profiles)
+                self._ret_q.put_nowait([exp_id, profiles])
 
-    def _load_settings(self, settings_file):
+    def load_settings(self, settings_file):
         self.raw_settings = raw.load_settings(settings_file)
 
     def _abort(self):
@@ -458,6 +484,65 @@ class raver_process(multiprocessing.Process):
                     cmd, args, kwargs = self._cmd_q.get_nowait()
             except queue.Empty:
                 break
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        self._stop_event.set()
+
+
+class save_thread(threading.Thread):
+    #It's possible this would be more efficient as it's own process, but I'll
+    #leave it here as a thread for now, and do some testing if this is a limitation
+
+    def __init__(self, cmd_q, ret_q, abort_event, raw_settings):
+        threading.Thread.__init__(self)
+        self.daemon = True
+
+        self._cmd_q = cmd_q
+        self._ret_q = ret_q
+        self._abort_event = abort_event
+        self._stop_event = threading.Event()
+
+        self.raw_settings = raw_settings
+
+        self._commands = {'save_profiles': self._save_profiles,
+            'set_raw_settings'  : self._set_raw_settings,
+            }
+
+    def run(self):
+        while True:
+            if self._stop_event.is_set():
+                break
+
+            if self._abort_event.is_set():
+                self._abort()
+
+            try:
+                cmd, args = self._cmd_q.popleft()
+            except IndexError:
+                cmd = None
+
+            if cmd is not None:
+                print(cmd)
+                self._commands[cmd](*args)
+
+            else:
+                time.sleep(0.1)
+
+    def _save_profiles(self, output_dir, profiles):
+
+        for profile in profiles:
+            raw.save_profile(profile, datadir=output_dir,
+                settings=self.raw_settings)
+
+    def _set_raw_settings(self, settings):
+        self.raw_settings = settings
+
+    def _abort(self):
+        self._cmd_q.clear()
+        self._ret_q.clear()
+
+        self._abort_event.clear()
 
     def stop(self):
         """Stops the thread cleanly."""
