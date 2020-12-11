@@ -130,11 +130,20 @@ class pipeline_thread(threading.Thread):
                 img_data = None
 
             if img_data is not None:
+                exp_id = img_data[-2]
+                data_dir = img_data[-1]
+                img_data = img_data[:-2]
+
+                if exp_id is None:
+                    exp_id = self.current_experiment
+
+                if data_dir is None:
+                    data_dir = self.data_dir
+
                 self.active = True
                 with self.r_cmd_lock:
-                    self.r_cmd_q.put_nowait(['raver_images',
-                        self.current_experiment, img_data,
-                        {'load_path':self.data_dir}])
+                    self.r_cmd_q.put_nowait(['raver_images', exp_id, img_data,
+                        {'load_path': data_dir}])
 
             try:
                 with self.r_ret_lock:
@@ -282,14 +291,26 @@ class pipeline_thread(threading.Thread):
 
         self.current_experiment = exp_name
 
-        self._set_data_dir_and_fprefix(data_dir, fprefix)
+        self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
+        self.fprefix = fprefix
+
+        if self.pl_settings['use_default_output_dir']:
+            output_dir = os.path.join(data_dir,
+                self.pl_settings['default_output_dir'])
+
+            self._set_output_dir(output_dir)
+
+        self.m_cmd_q.append(['set_experiment', [self.data_dir,
+            self.fprefix, self.current_experiment]])
 
     def _stop_experiment(self, exp_name):
         if exp_name in self.expeirments:
             self.experiments[exp_name].collection_finished = True
 
     def _save_profiles(self, profile_data):
+        print('saving profiles')
         exp_id, profiles = profile_data
+        print(exp_id)
 
         if self.pl_settings['save_raver_profiles']:
             if exp_id in self.experiments:
@@ -297,6 +318,9 @@ class pipeline_thread(threading.Thread):
             else:
                 profiles_dir = self.profiles_dir
 
+            for profile in profiles:
+                print(profile.getParameter('filename'))
+            print(profiles_dir)
             if profiles_dir is not None:
                 self.s_cmd_q.append(['save_profiles', [profiles_dir, profiles]])
 
@@ -310,6 +334,8 @@ class pipeline_thread(threading.Thread):
     def _check_exp_status(self):
 
         save_proc_data = self.pl_settings['save_processed_data']
+        save_report = self.pl_settings['save_report']
+        report_type = self.pl_settings['report_type']
 
         for exp in self.experiments.values():
             if not exp.collection_finished:
@@ -322,7 +348,8 @@ class pipeline_thread(threading.Thread):
                     if exp.exp_type == 'SEC':
                         self.a_cmd_q.put_nowait(['make_and_analyze_series',
                             exp.exp_name, [exp.analysis_dir, exp.profiles,
-                            save_proc_data], self._analysis_args])
+                            save_proc_data, save_report, report_type,
+                            exp.output_dir], self._analysis_args])
                         exp.analysis_last_modified = time.time()
 
                     elif exp.exp_type == 'Batch':
@@ -363,52 +390,8 @@ class pipeline_thread(threading.Thread):
                 exp.check_analysis_timeout(self.pl_settings)
 
             if exp.analysis_finished:
-                self._make_report(exp)
-
-    def _make_report(self, exp):
-        print('making report')
-        if self.pl_settings['save_report']:
-
-            if exp.exp_type == 'SEC':
-                name = exp.series.getParameter('filename')
-
-            elif exp.exp_type == 'Batch':
-                name = exp.sub_profile.getParameter('filename')
-
-            name = '{}_report.pdf'.format(os.path.splitext(name)[0])
-
-            out_dir = exp.output_dir
-            if exp.sub_profile is not None:
-                profiles = [exp.sub_profile]
-            else:
-                profiles = []
-
-            if exp.ift is not None:
-                ifts = [exp.ift]
-            else:
-                ifts = []
-
-            if exp.series is not None:
-                series = [exp.series]
-            else:
-                series = []
-
-            if exp.dammif_data is not None:
-                dammif_data = [exp.dammif_data]
-            else:
-                dammif_data = []
-
-            if exp.denss_data is not None:
-                denss_data = [exp.denss_data]
-            else:
-                denss_data = []
-
-            pdf.make_report_from_data(name, out_dir, profiles, ifts, series,
-                dammif_data=dammif_data, denss_data=denss_data)
-
-            # Making the report needs to go either in the main thread or in it's own process (maybe tack it on to the analysis process?)
-
-        del self.experiments[exp.exp_name]
+                self._ret_q.append(exp)
+                del self.experiments[exp.exp_name]
 
     def _set_analysis_args(self):
         self._analysis_args = {
@@ -491,7 +474,7 @@ class Experiment(object):
                 if len(self.profiles) == self.num_exps:
                     self.collection_finished = True
 
-                self.last_modified = time.time()
+                self.exp_last_modified = time.time()
 
             elif self.exp_type == 'Batch':
                 for prof in new_profiles:
@@ -504,7 +487,7 @@ class Experiment(object):
                     and len(self.buffer_profiles) == self.num_buffer_exps):
                     self.collection_finished = True
 
-                self.last_modified = time.time()
+                self.exp_last_modified = time.time()
 
     def check_exp_timeout(self, pl_settings):
         if self.exp_type == 'SEC':
@@ -533,7 +516,5 @@ if __name__ == '__main__':
 """
 Todos:
 3) Need to think about whether to wrap the calls to all the return queues to check for multiple items, so it moves everything along at once
-4) Need to test!
-5) Make report needs to be either in the main thread or in it's own process (maybe the analysis process?)
-6) Timeout for the experiment to terminate doesn't seem to work.
+6) Batch mode processing!
 """

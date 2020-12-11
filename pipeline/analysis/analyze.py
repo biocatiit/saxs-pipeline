@@ -14,6 +14,7 @@ import bioxtasraw.RAWAPI as raw
 import bioxtasraw.SASFileIO as SASFileIO
 
 from ..reports import data as report_data
+from ..reports import pdf
 
 def find_dmax(profile, settings, use_atsas=True, single_proc=True):
     analysis_dict = profile.getParameter('analysis')
@@ -1043,6 +1044,9 @@ class analysis_process(multiprocessing.Process):
         out_dir = args[0]
         profiles = args[1]
         save_processed = args[2]
+        save_report = args[3]
+        report_type = args[4]
+        report_dir = args[5]
 
         series, sub_profile = self._make_and_subtract_series(profiles, out_dir,
             save_processed)
@@ -1056,6 +1060,23 @@ class analysis_process(multiprocessing.Process):
 
             with self._ret_lock:
                 self._ret_q.put_nowait(['analysis_results', exp_id, results])
+
+            profile = results['profile']
+            ift = results['ift']
+            dammif_data = results['dammif_data']
+            denss_data = results['denss_data']
+
+        else:
+            profile = sub_profile
+            ift = None
+            denss_data = None
+            dammif_data = None
+
+        print(save_report)
+        if save_report:
+            print('here')
+            self._make_report(profile, ift, dammif_data, denss_data, report_dir,
+                series, report_type)
 
 
     def _make_and_subtract_series(self, profiles, out_dir, save_processed):
@@ -1085,6 +1106,53 @@ class analysis_process(multiprocessing.Process):
             raw.save_series(series, datadir=out_dir)
 
         return series, sub_profile
+
+    def _make_report(self, profile, ift, dammif_data, denss_data, out_dir,
+        series=None, report_type='pdf'):
+        print('making report')
+        if series is not None:
+            name = series.getParameter('filename')
+
+        elif profile is not None:
+            name = profile.getParameter('filename')
+
+        elif ift is not None:
+            name = ift.getParameter('filename')
+
+        else:
+            name = 'pipeline'
+
+
+        name = '{}_report.{}'.format(os.path.splitext(name)[0], report_type)
+
+        if profile is not None:
+            profiles = [profile]
+        else:
+            profiles = []
+
+        if ift is not None:
+            ifts = [ift]
+        else:
+            ifts = []
+
+        if series is not None:
+            series = [series]
+        else:
+            series = []
+
+        if dammif_data is not None:
+            dammif_data = [dammif_data]
+        else:
+            dammif_data = []
+
+        if denss_data is not None:
+            denss_data = [denss_data]
+        else:
+            denss_data = []
+
+        if report_type == 'pdf':
+            pdf.make_report_from_data(name, out_dir, profiles, ifts, series,
+                dammif_data=dammif_data, denss_data=denss_data)
 
     def load_settings(self, settings_file):
         self.raw_settings = raw.load_settings(settings_file)

@@ -13,7 +13,7 @@ class Settings(object):
             'default_analysis_dir'      : ['./analysis', 'str'], #The default analysis directory to save radially averaged .dat files to, relative to the output directory
             'use_default_analysis_dir'  : [True, 'bool'], #If the default analysis directory location should be used, or if it will be set manually
             'save_raver_profiles'       : [True, 'bool'], #Save profiles after radial averaging as individual .dat files
-            'sec_exp_timeout'           : [120, 'float'], #Number of seconds without new data that causes the pipeline to assume the experiment has finished but the pipeline was not informed. -1 is infinite
+            'sec_exp_timeout'           : [60, 'float'], #Number of seconds without new data that causes the pipeline to assume the experiment has finished but the pipeline was not informed. -1 is infinite
             'batch_exp_timeout'         : [600, 'float'], #Number of seconds without new data that causes the pipeline to assume the experiment has finished but the pipeline was not informed. -1 is infinite
             'sec_analysis_timeout'      : [600, 'float'], #Number of seconds to wait for analysis to finish before assuming it failed. -1 is infinite
             'batch_analysis_timeout'    : [600, 'float'], #Number of seconds to wait for analysis to finish before assuming it failed. -1 is infinite
