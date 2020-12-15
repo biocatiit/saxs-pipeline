@@ -12,6 +12,7 @@ import matplotlib as mpl
 
 import bioxtasraw.RAWAPI as raw
 import bioxtasraw.SASFileIO as SASFileIO
+import bioxtasraw.SASExceptions as SASExceptions
 
 from ..reports import data as report_data
 from ..reports import pdf
@@ -108,6 +109,8 @@ def find_dmax(profile, settings, use_atsas=True, single_proc=True):
     else:
         dmax = -1
 
+    dmax = int(round(dmax))
+
     return dmax
 
 def calc_mw(profile, settings, use_atsas=True):
@@ -128,8 +131,15 @@ def calc_mw(profile, settings, use_atsas=True):
     raw.mw_vc(profile, settings=settings)
 
     if use_atsas:
-        raw.mw_bayes(profile)
-        raw.mw_datclass(profile)
+        try:
+            raw.mw_bayes(profile)
+        except Exception:
+            pass
+
+        try:
+            raw.mw_datclass(profile)
+        except Exception:
+            pass
 
 def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     cluster=False, refine=False, abort_event=threading.Event()):
@@ -941,6 +951,8 @@ class analysis_process(multiprocessing.Process):
             'process_ift': self._proc_ift,
             'make_and_subtract_series': self._make_and_subtract_series_cmd,
             'make_and_analyze_series': self._make_and_analyze_series,
+            'average_and_subtract_batch': self._average_and_subtract_batch,
+            'subtract_and_analyze_batch': self._subtract_and_analyze_batch,
             }
 
     def run(self):
@@ -1072,9 +1084,7 @@ class analysis_process(multiprocessing.Process):
             denss_data = None
             dammif_data = None
 
-        print(save_report)
         if save_report:
-            print('here')
             self._make_report(profile, ift, dammif_data, denss_data, report_dir,
                 series, report_type)
 
@@ -1106,6 +1116,91 @@ class analysis_process(multiprocessing.Process):
             raw.save_series(series, datadir=out_dir)
 
         return series, sub_profile
+
+    def _average_and_subtract_batch(self, sample_profiles, buffer_profiles,
+        out_dir, save_processed, sim_test='cormap', sim_threshold=0.1,
+        sim_corr='Bonferroni', use_sim_test=True):
+        sample_profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
+        buffer_profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
+
+        if use_sim_test:
+            if sim_test.lower() == 'cormap':
+                _, sample_cor_pvals, failed = raw.cormap(sample_profiles[1:],
+                    sample_profiles[0], sim_corr)
+
+                _, buffer_cor_pvals, failed = raw.cormap(buffer_profiles[1:],
+                    buffer_profiles[0], sim_corr)
+        else:
+            sample_cor_pvals = [1 for prof in sample_profiles]
+            buffer_cor_pvals = [1 for prof in buffer_profiles]
+
+        sample_reduced_profs = [sample_profiles[0]]
+        for i, prof in enumerate(sample_profiles[1:]):
+            if sample_cor_pvals[i] >= sim_threshold:
+                sample_reduced_profs.append(prof)
+
+        buffer_reduced_profs = [buffer_profiles[0]]
+        for i, prof in enumerate(buffer_profiles[1:]):
+            if buffer_cor_pvals[i] >= sim_threshold:
+                buffer_reduced_profs.append(prof)
+
+        try:
+            avg_buffer_prof = raw.average(buffer_reduced_profs)
+        except SASExceptions.DataNotCompatible:
+            avg_buffer_prof = None
+
+        try:
+            avg_sample_prof = raw.average(sample_reduced_profs)
+        except SASExceptions.DataNotCompatible:
+            avg_sample_prof = None
+
+        if avg_buffer_prof is not None and avg_sample_prof is not None:
+            sub_profile = raw.subtract([avg_sample_prof], avg_buffer_prof)[0]
+
+        else:
+            sub_profile = None
+
+        if save_processed:
+            if avg_sample_prof is not None:
+                raw.save_profile(avg_sample_prof, datadir=out_dir)
+            if avg_buffer_prof is not None:
+                raw.save_profile(avg_buffer_prof, datadir=out_dir)
+
+        return sub_profile, avg_sample_prof, avg_buffer_prof
+
+    def _subtract_and_analyze_batch(self, exp_id, *args, **kwargs):
+        out_dir = args[0]
+        sample_profiles = args[1]
+        buffer_profiles = args[2]
+        save_processed = args[3]
+        save_report = args[4]
+        report_type = args[5]
+        report_dir = args[6]
+
+        sub_profile, avg_sample_prof, avg_buffer_prof = self._average_and_subtract_batch(sample_profiles,
+            buffer_profiles, out_dir, save_processed)
+
+        if sub_profile is not None:
+            results = self._proc_data([sub_profile], [], out_dir,
+                save_processed, **kwargs)
+
+            with self._ret_lock:
+                self._ret_q.put_nowait(['analysis_results', exp_id, results])
+
+            profile = results['profile']
+            ift = results['ift']
+            dammif_data = results['dammif_data']
+            denss_data = results['denss_data']
+
+        else:
+            profile = sub_profile
+            ift = None
+            denss_data = None
+            dammif_data = None
+
+        if save_report:
+            self._make_report(profile, ift, dammif_data, denss_data, report_dir,
+                report_type=report_type)
 
     def _make_report(self, profile, ift, dammif_data, denss_data, out_dir,
         series=None, report_type='pdf'):
@@ -1168,10 +1263,3 @@ class analysis_process(multiprocessing.Process):
     def stop(self):
         """Stops the thread cleanly."""
         self._stop_event.set()
-
-
-"""
-I should return processed profiles and IFTs as soon as their finished, so they
-can be saved and looked at without waiting for dammif/denss to run. Or just
-save them in the analysis function?
-"""

@@ -274,7 +274,6 @@ class pipeline_thread(threading.Thread):
             proc.load_settings(raw_settings_file)
 
     def _start_experiment(self, *args, **kwargs):
-        print('starting experiment')
         exp_name = args[0]
         exp_type = args[1]
         data_dir = args[2]
@@ -287,7 +286,7 @@ class pipeline_thread(threading.Thread):
             self.experiments[exp_name] = new_exp
 
         else:
-            self.expeirments[exp_name].current_fprefix = fprefix
+            self.experiments[exp_name].current_fprefix = fprefix
 
         self.current_experiment = exp_name
 
@@ -304,13 +303,11 @@ class pipeline_thread(threading.Thread):
             self.fprefix, self.current_experiment]])
 
     def _stop_experiment(self, exp_name):
-        if exp_name in self.expeirments:
+        if exp_name in self.experiments:
             self.experiments[exp_name].collection_finished = True
 
     def _save_profiles(self, profile_data):
-        print('saving profiles')
         exp_id, profiles = profile_data
-        print(exp_id)
 
         if self.pl_settings['save_raver_profiles']:
             if exp_id in self.experiments:
@@ -318,9 +315,6 @@ class pipeline_thread(threading.Thread):
             else:
                 profiles_dir = self.profiles_dir
 
-            for profile in profiles:
-                print(profile.getParameter('filename'))
-            print(profiles_dir)
             if profiles_dir is not None:
                 self.s_cmd_q.append(['save_profiles', [profiles_dir, profiles]])
 
@@ -343,7 +337,9 @@ class pipeline_thread(threading.Thread):
 
             if exp.collection_finished and exp.analysis_last_modified == -1:
                 self.active = True
-                print('experiment finished')
+
+                print('experiment collection finished')
+
                 with self.a_cmd_lock:
                     if exp.exp_type == 'SEC':
                         self.a_cmd_q.put_nowait(['make_and_analyze_series',
@@ -353,8 +349,11 @@ class pipeline_thread(threading.Thread):
                         exp.analysis_last_modified = time.time()
 
                     elif exp.exp_type == 'Batch':
-                        pass
-                        #batch processing goes here, not developed yet
+                        self.a_cmd_q.put_nowait(['subtract_and_analyze_batch',
+                            exp.exp_name, [exp.analysis_dir, exp.profiles,
+                            exp.buffer_profiles, save_proc_data, save_report,
+                            report_type, exp.output_dir], self._analysis_args])
+                        exp.analysis_last_modified = time.time()
 
     def _add_analysis_to_experiment(self, results):
         print('adding analysis to experiment')
