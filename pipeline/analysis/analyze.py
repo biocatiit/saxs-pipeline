@@ -1,3 +1,24 @@
+# coding: utf-8
+#
+#    Project: BioCAT SAXS pipeline
+#             https://github.com/biocatiit/saxs-pipeline
+#
+#
+#    Principal author:       Jesse Hopkins
+#
+#    This is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This software is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this software.  If not, see <http://www.gnu.org/licenses/>.
+
 import os
 import copy
 import multiprocessing
@@ -934,7 +955,7 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
 class analysis_process(multiprocessing.Process):
 
     def __init__(self, cmd_q, ret_q, cmd_lock, ret_lock, abort_event,
-        raw_settings_file):
+        raw_settings_file, log_lock, log_q):
         multiprocessing.Process.__init__(self)
         self.daemon = True
 
@@ -944,6 +965,8 @@ class analysis_process(multiprocessing.Process):
         self._ret_lock = ret_lock
         self._abort_event = abort_event
         self._stop_event = multiprocessing.Event()
+        self._log_lock = log_lock
+        self._log_queue = log_q
 
         self.raw_settings = raw.load_settings(raw_settings_file)
 
@@ -970,13 +993,14 @@ class analysis_process(multiprocessing.Process):
                 cmd = None
 
             if cmd is not None:
-                print(cmd)
+                self._log('info', "Processing cmd '%s'" %(cmd))
                 self._commands[cmd](exp_id, *args, **kwargs)
 
             else:
                 time.sleep(0.1)
 
     def _proc_profile(self, exp_id, *args, **kwargs):
+        self._log('debug', 'Processing profile for experiment %s' %(exp_id))
 
         out_dir = args[0]
         profile = args[1]
@@ -992,6 +1016,8 @@ class analysis_process(multiprocessing.Process):
             self._ret_q.put_nowait(['analysis_results', exp_id, results])
 
     def _proc_ift(self, exp_id, *args, **kwargs):
+        self._log('debug', 'Processing IFT for experiment %s' %(exp_id))
+
         out_dir = args[0]
         ift = args[1]
         save_processed = args[2]
@@ -1006,6 +1032,8 @@ class analysis_process(multiprocessing.Process):
             self._ret_q.put_nowait(['analysis_results', exp_id, results])
 
     def _proc_data(self, profiles, ifts, out_dir, save_processed, **kwargs):
+        self._log('info', 'Analyzing profiles and IFTs')
+
         kwargs['single_proc'] = True
         kwargs['abort_event'] = self._abort_event
 
@@ -1042,6 +1070,7 @@ class analysis_process(multiprocessing.Process):
         return results
 
     def _make_and_subtract_series_cmd(self, exp_id, *args, **kwargs):
+
         out_dir = args[0]
         profiles = args[1]
         save_processed = args[2]
@@ -1053,6 +1082,8 @@ class analysis_process(multiprocessing.Process):
             self._ret_q.put_nowait(['sub_series', exp_id, series, sub_profile])
 
     def _make_and_analyze_series(self, exp_id, *args, **kwargs):
+        self._log('info', 'Analyzing series')
+
         out_dir = args[0]
         profiles = args[1]
         save_processed = args[2]
@@ -1090,6 +1121,8 @@ class analysis_process(multiprocessing.Process):
 
 
     def _make_and_subtract_series(self, profiles, out_dir, save_processed):
+        self._log('debug', 'Making and subtracting series')
+
         profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
 
         series = raw.profiles_to_series(profiles, self.raw_settings)
@@ -1098,6 +1131,8 @@ class analysis_process(multiprocessing.Process):
             settings=self.raw_settings)
 
         if success:
+            self._log('debug', 'Found buffer range: {} to {}'.format(start, end))
+
             raw.set_buffer_range(series, [[start, end]],
                 settings=self.raw_settings)
 
@@ -1105,6 +1140,7 @@ class analysis_process(multiprocessing.Process):
                 settings=self.raw_settings)
 
             if success:
+                self._log('debug', 'Found sample range: {} to {}'.format(start, end))
                 sub_profile = raw.set_sample_range(series, [[start, end]])
             else:
                 sub_profile = None
@@ -1120,6 +1156,8 @@ class analysis_process(multiprocessing.Process):
     def _average_and_subtract_batch(self, sample_profiles, buffer_profiles,
         out_dir, save_processed, sim_test='cormap', sim_threshold=0.1,
         sim_corr='Bonferroni', use_sim_test=True):
+        self._log('debug', 'Averaging and subtracting batch data')
+
         sample_profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
         buffer_profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
 
@@ -1169,6 +1207,8 @@ class analysis_process(multiprocessing.Process):
         return sub_profile, avg_sample_prof, avg_buffer_prof
 
     def _subtract_and_analyze_batch(self, exp_id, *args, **kwargs):
+        self._log('debug', 'Analyzing batch data')
+
         out_dir = args[0]
         sample_profiles = args[1]
         buffer_profiles = args[2]
@@ -1204,7 +1244,8 @@ class analysis_process(multiprocessing.Process):
 
     def _make_report(self, profile, ift, dammif_data, denss_data, out_dir,
         series=None, report_type='pdf'):
-        print('making report')
+        self._log('debug', 'Making report')
+
         if series is not None:
             name = series.getParameter('filename')
 
@@ -1250,7 +1291,12 @@ class analysis_process(multiprocessing.Process):
                 dammif_data=dammif_data, denss_data=denss_data)
 
     def load_settings(self, settings_file):
+        self._log('debug', 'Loading RAW settings from {}'.format(settings_file))
         self.raw_settings = raw.load_settings(settings_file)
+
+    def _log(self, level, msg):
+        with self._log_lock:
+            self._log_queue.put_nowait((level, '{} - {}'.format(self.name, msg)))
 
     def _abort(self):
         while True:

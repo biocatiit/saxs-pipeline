@@ -1,3 +1,24 @@
+# coding: utf-8
+#
+#    Project: BioCAT SAXS pipeline
+#             https://github.com/biocatiit/saxs-pipeline
+#
+#
+#    Principal author:       Jesse Hopkins
+#
+#    This is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This software is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this software.  If not, see <http://www.gnu.org/licenses/>.
+
 import threading
 import time
 import multiprocessing as mp
@@ -5,6 +26,10 @@ import queue
 import os
 import collections
 import copy
+import logging
+
+if __name__ != '__main__':
+    logger = logging.getLogger(__name__)
 
 import bioxtasraw.RAWAPI as raw
 
@@ -19,6 +44,9 @@ class pipeline_thread(threading.Thread):
         raw_settings_file):
         threading.Thread.__init__(self)
         self.daemon = True
+        self.name = 'pipeline_ctrl_thread'
+
+        logger.info("Initializing pipeline control thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -98,6 +126,12 @@ class pipeline_thread(threading.Thread):
         self.a_ret_lock = self.manager.Lock()
         self.a_abort_event = self.manager.Event()
 
+        self.mp_log_lock = self.manager.Lock()
+        self.mp_log_queue = self.manager.Queue()
+
+        self.mp_log_thread = mp_log_thread(self.mp_log_lock, self.mp_log_queue)
+        self.mp_log_thread.start()
+
         for i in range(self.pl_settings['r_procs']):
             self._start_reduction_process()
 
@@ -120,7 +154,10 @@ class pipeline_thread(threading.Thread):
                 cmd = None
 
             if cmd is not None:
-                print(cmd)
+                logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
+                    cmd, ', '.join(['{}'.format(a) for a in args]),
+                    ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
+
                 self._commands[cmd](*args, **kwargs)
 
             # Need to wrap this and the ret_q in a while, and get all things in the q?
@@ -175,25 +212,33 @@ class pipeline_thread(threading.Thread):
             if not self.active:
                 time.sleep(0.1)
 
+        logger.info("Quitting pipeline control thread")
+
     def _start_reduction_process(self):
+        logger.debug('Starting reduction process %i', len(self.reduction_processes)+1)
+
         proc = reduce_data.raver_process(self.r_cmd_q, self.r_ret_q,
             self.r_cmd_lock, self.r_ret_lock, self.r_abort_event,
-            self.raw_settings_file)
+            self.raw_settings_file, self.mp_log_lock, self.mp_log_queue)
 
         proc.start()
 
         self.reduction_processes.append(proc)
 
     def _start_analysis_process(self):
+        logger.debug('Starting analysis process %i', len(self.analysis_processes)+1)
+
         proc = analyze.analysis_process(self.a_cmd_q, self.a_ret_q,
             self.a_cmd_lock, self.a_ret_lock, self.a_abort_event,
-            self.raw_settings_file)
+            self.raw_settings_file, self.mp_log_lock, self.mp_log_queue)
 
         proc.start()
 
         self.analysis_processes.append(proc)
 
     def _set_data_dir(self, data_dir):
+        logger.debug('Setting data directory: %s'. data_dir)
+
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
         if self.pl_settings['use_default_output_dir']:
@@ -205,11 +250,16 @@ class pipeline_thread(threading.Thread):
         self.m_cmd_q.append(['set_data_dir', [self.data_dir]])
 
     def _set_fprefix(self, fprefix):
+        logger.debug('Setting file prefix: %s' %fprefix)
+
         self.fprefix = fprefix
 
         self.m_cmd_q.append(['set_fprefix', [self.fprefix]])
 
     def _set_data_dir_and_fprefix(self, data_dir, fprefix):
+        logger.debug('Setting data directory and file prefix: %s, %s', data_dir,
+            fprefix)
+
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
         self.fprefix = fprefix
 
@@ -223,6 +273,8 @@ class pipeline_thread(threading.Thread):
             self.fprefix]])
 
     def _set_output_dir(self, output_dir):
+        logger.debug('Setting output directory: %s', output_dir)
+
         self.output_dir = os.path.abspath(os.path.expanduser(output_dir))
 
         if not os.path.exists(self.output_dir):
@@ -244,6 +296,8 @@ class pipeline_thread(threading.Thread):
             self._set_analysis_dir(analysis_dir)
 
     def _set_profiles_dir(self, profiles_dir):
+        logger.debug('Setting profiles output directory: %s', profiles_dir)
+
         self.profiles_dir = os.path.abspath(os.path.expanduser(profiles_dir))
 
         if self.current_experiment in self.experiments:
@@ -253,6 +307,8 @@ class pipeline_thread(threading.Thread):
             os.mkdir(self.profiles_dir)
 
     def _set_analysis_dir(self, analysis_dir):
+        logger.debug('Setting analysis output directory: %s', analysis_dir)
+
         self.analysis_dir = os.path.abspath(os.path.expanduser(analysis_dir))
 
         if self.current_experiment in self.experiments:
@@ -262,6 +318,8 @@ class pipeline_thread(threading.Thread):
             os.mkdir(self.analysis_dir)
 
     def _load_raw_settings(self, raw_settings_file):
+        logger.debug('Loading RAW settings from %s', raw_settings_file)
+
         self.raw_settings = raw.load_settings(raw_settings_file)
 
         self.m_cmd_q.append(['set_raw_settings', [self.raw_settings]])
@@ -274,6 +332,10 @@ class pipeline_thread(threading.Thread):
             proc.load_settings(raw_settings_file)
 
     def _start_experiment(self, *args, **kwargs):
+        logger.debug('Starting experiment with args: %s and kwargs: %s',
+            ', '.join(['{}'.format(a) for a in args]),
+            ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
+
         exp_name = args[0]
         exp_type = args[1]
         data_dir = args[2]
@@ -303,29 +365,28 @@ class pipeline_thread(threading.Thread):
             self.fprefix, self.current_experiment]])
 
     def _stop_experiment(self, exp_name):
+        logger.debug('Stopping experiment %s', exp_name)
+
         if exp_name in self.experiments:
             self.experiments[exp_name].collection_finished = True
 
     def _save_profiles(self, profile_data):
+        logger.debug('Saving profiles')
+
         exp_id, profiles = profile_data
-        print(self.experiments.keys())
-        print(exp_id)
+
         if self.pl_settings['save_raver_profiles']:
             if exp_id in self.experiments:
-                print('here')
                 profiles_dir = self.experiments[exp_id].profiles_dir
             else:
-                print('here2')
                 profiles_dir = self.profiles_dir
 
-            print(profiles_dir)
-            for prof in profiles:
-                print(prof.getParameter('filename'))
             if profiles_dir is not None:
                 self.s_cmd_q.append(['save_profiles', [profiles_dir, profiles]])
 
     def _add_profiles_to_experiment(self, profile_data):
-        print('adding profiles to experiment')
+        logger.debug('Adding profiles to experiment')
+
         exp_id, profiles = profile_data
 
         if exp_id in self.experiments:
@@ -344,7 +405,7 @@ class pipeline_thread(threading.Thread):
             if exp.collection_finished and exp.analysis_last_modified == -1:
                 self.active = True
 
-                print('experiment collection finished')
+                logger.info('Experiment %s data collection finished', exp.exp_name)
 
                 with self.a_cmd_lock:
                     if exp.exp_type == 'SEC':
@@ -362,7 +423,8 @@ class pipeline_thread(threading.Thread):
                         exp.analysis_last_modified = time.time()
 
     def _add_analysis_to_experiment(self, results):
-        print('adding analysis to experiment')
+        logger.debug('Adding analysis to experiment')
+
         res_type = results[0]
         exp_id = results[1]
 
@@ -395,6 +457,8 @@ class pipeline_thread(threading.Thread):
                 exp.check_analysis_timeout(self.pl_settings)
 
             if exp.analysis_finished:
+                logger.info('Experiment %s analysis finished', exp.exp_name)
+
                 self._ret_q.append(exp)
                 del self.experiments[exp.exp_name]
 
@@ -415,6 +479,9 @@ class pipeline_thread(threading.Thread):
             }
 
     def _update_pipeline_settings(self, *args, **kwargs):
+        logger.debug('Updating pipeline settings: %s',
+            ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
+
         for key in kwargs:
             if key in self.pl_settings:
                 self.pl_settings[key] = kwargs[key]
@@ -432,8 +499,59 @@ class pipeline_thread(threading.Thread):
 
     def stop(self):
         """Stops the thread cleanly."""
+
+        self.monitor_thread.stop()
+        self.monitor_thread.join()
+
+        self.save_thread.stop()
+        self.save_thread.join()
+
+        for proc in self.analysis_processes:
+            proc.stop()
+            proc.join()
+
+        for proc in self.reduction_processes:
+            proc.stop()
+            proc.join()
+
+        self.mp_log_thread.stop()
+
         self._stop_event.set()
 
+class mp_log_thread(threading.Thread):
+    #It's possible this would be more efficient as it's own process, but I'll
+    #leave it here as a thread for now, and do some testing if this is a limitation
+
+    def __init__(self, log_lock, log_q):
+        threading.Thread.__init__(self)
+        self.daemon = True
+        self.name = ''
+
+        logger.info("Initializing pipeline mp log thread")
+
+        self._log_lock = log_lock
+        self._log_queue = log_q
+        self._stop_event = threading.Event()
+
+    def run(self):
+        while True:
+            if self._stop_event.is_set():
+                break
+
+            try:
+                with self._log_lock:
+                    level, log = self._log_queue.get_nowait()
+                func = getattr(logger, level)
+                func(log)
+            except queue.Empty:
+                log = None
+
+            if log is None:
+                time.sleep(0.1)
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        self._stop_event.set()
 
 class Experiment(object):
 
@@ -502,6 +620,7 @@ class Experiment(object):
 
         if timeout > 0 and self.exp_last_modified > 0:
             if time.time() - self.exp_last_modified > timeout:
+                logger.error('Experiment %s data collection timed out', self.exp_name)
                 self.collection_finished = True
 
     def check_analysis_timeout(self, pl_settings):
@@ -512,6 +631,7 @@ class Experiment(object):
 
         if timeout > 0 and self.analysis_last_modified > 0:
             if time.time() - self.analysis_last_modified > timeout:
+                logger.error('Experiment %s analysis timed out', self.exp_name)
                 self.analysis_finished = True
 
 if __name__ == '__main__':

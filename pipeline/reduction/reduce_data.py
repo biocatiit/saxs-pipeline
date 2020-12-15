@@ -1,9 +1,34 @@
+# coding: utf-8
+#
+#    Project: BioCAT SAXS pipeline
+#             https://github.com/biocatiit/saxs-pipeline
+#
+#
+#    Principal author:       Jesse Hopkins
+#
+#    This is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This software is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this software.  If not, see <http://www.gnu.org/licenses/>.
+
 import os.path
 import multiprocessing
 import queue
 import threading
 import collections
 import time
+import logging
+
+if __name__ != '__main__':
+    logger = logging.getLogger(__name__)
 
 import watchdog.utils.dirsnapshot as dirsnapshot
 
@@ -81,6 +106,9 @@ class monitor_and_load(threading.Thread):
         pipeline_settings):
         threading.Thread.__init__(self)
         self.daemon = True
+        self.name = 'monitor_and_load_thread'
+
+        logger.info("Initializing pipeline monitor and load thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -124,7 +152,8 @@ class monitor_and_load(threading.Thread):
                 cmd = None
 
             if cmd is not None:
-                print(cmd)
+                logger.info("Processing cmd '%s' with args: %s", cmd,
+                    ', '.join(['{}'.format(a) for a in args]))
                 self._commands[cmd](*args)
 
             if self._abort_event.is_set():
@@ -234,7 +263,11 @@ class monitor_and_load(threading.Thread):
             if not got_new_images:
                 time.sleep(0.1)
 
+        logger.info("Quitting pipeline monitor_and_load thread")
+
     def _set_data_dir(self, data_dir):
+        logging.debug('Setting data directory: %s', data_dir)
+
         self._monitor_cmd_q.append(['set_data_dir', [data_dir,]])
 
         self.data_dir = data_dir
@@ -243,20 +276,26 @@ class monitor_and_load(threading.Thread):
         self._monitor_cmd_q.append(['set_fprefix', [fprefix,]])
 
     def _set_data_dir_fprefix(self, data_dir, fprefix):
+        logging.debug('Setting data directory: %s', data_dir)
+
         self._monitor_cmd_q.append(['set_data_dir_and_fprefix', [data_dir, fprefix]])
 
         self.data_dir = data_dir
 
     def _set_experiment(self, data_dir, fprefix, exp_id):
+        logger.debug('Setting experiment to %s, data directory to %s', exp_id, data_dir)
         self._exp_id = exp_id
         self.data_dir = data_dir
 
         self._monitor_cmd_q.append(['set_experiment', [data_dir, fprefix, exp_id]])
 
     def _set_ret_size(self, size):
+        logger.debug('Setting return chunk size to %i', size)
         self.ret_every = int(size)
 
     def _load_image_and_counter(self, img_name):
+        logger.debug('Loading image %s', img_name)
+
         file_size = -1
         while file_size != os.path.getsize(img_name):
             file_size = os.path.getsize(img_name)
@@ -268,12 +307,13 @@ class monitor_and_load(threading.Thread):
             imgs = img_hdrs = counters = fnames = failed = []
 
         if len(failed) > 0:
-            print('\n\n\n*********************FAILED***********************\n\n\n')
-            print(failed)
+            logger.error('Failed to load image %s', img_name)
 
         return imgs, fnames, img_hdrs, counters
 
     def _set_raw_settings(self, settings):
+        logger.debug('Setting RAW settings')
+
         self.raw_settings = settings
 
     def _abort(self):
@@ -294,6 +334,8 @@ class monitor_and_load(threading.Thread):
     def stop(self):
         """Stops the process cleanly."""
         self._monitor_thread.stop()
+        self._monitor_thread.join()
+
         self._stop_event.set()
 
 class monitor_thread(threading.Thread):
@@ -301,6 +343,9 @@ class monitor_thread(threading.Thread):
     def __init__(self, cmd_q, ret_q, abort_event, pipeline_settings):
         threading.Thread.__init__(self)
         self.daemon = True
+        self.name = 'monitor_thread'
+
+        logger.info("Initializing pipeline monitor thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -335,7 +380,9 @@ class monitor_thread(threading.Thread):
                 cmd = None
 
             if cmd is not None:
-                print(cmd)
+                logger.info("Processing cmd '%s' with args: %s", cmd,
+                    ', '.join(['{}'.format(a) for a in args]))
+
                 self._commands[cmd](*args)
 
             if self.data_dir is not None:
@@ -352,12 +399,18 @@ class monitor_thread(threading.Thread):
             else:
                 time.sleep(0.1)
 
+        logger.info("Quitting pipeline monitor thread")
+
     def _set_data_dir(self, data_dir):
+        logger.debug('Setting data directory: %s', data_dir)
+
         self.data_dir = data_dir
 
         self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
 
     def _set_fprefix(self, fprefix):
+        logger.debug('Setting file prefix: %s', fprefix)
+
         self.fprefix = fprefix
 
     def _set_data_dir_fprefix(self, data_dir, fprefix):
@@ -365,6 +418,8 @@ class monitor_thread(threading.Thread):
         self._set_data_dir(data_dir)
 
     def _set_experiment(self, data_dir, fprefix, exp_id):
+        logger.debug('Setting experiment: %s', exp_id)
+
         self._exp_id = exp_id
         self._set_data_dir_fprefix(data_dir, fprefix)
 
@@ -387,6 +442,9 @@ class monitor_thread(threading.Thread):
                 and os.path.split(f)[1].startswith(self.fprefix)):
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
+        if new_images:
+            logger.debug('New images found: %s', ', '.join(new_images))
+
         return new_images
 
     def _abort(self):
@@ -405,9 +463,12 @@ class monitor_thread(threading.Thread):
 class raver_process(multiprocessing.Process):
 
     def __init__(self, cmd_q, ret_q, cmd_lock, ret_lock, abort_event,
-        raw_settings_file):
+        raw_settings_file, log_lock, log_queue):
         multiprocessing.Process.__init__(self)
         self.daemon = True
+        self.name = 'raver_process'
+
+        logger.info("Initializing pipeline radial averaging process")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -415,6 +476,9 @@ class raver_process(multiprocessing.Process):
         self._ret_lock = ret_lock
         self._abort_event = abort_event
         self._stop_event = multiprocessing.Event()
+
+        self._log_lock = log_lock
+        self._log_queue = log_queue
 
         self.raw_settings = raw.load_settings(raw_settings_file)
 
@@ -438,13 +502,15 @@ class raver_process(multiprocessing.Process):
                 cmd = None
 
             if cmd is not None:
-                print(cmd)
+                self._log('debug', "Processing cmd '%s'" %(cmd))
+
                 self._commands[cmd](exp_id, *args, **kwargs)
 
             else:
                 time.sleep(0.1)
 
     def _raver_images(self, exp_id, *args, **kwargs):
+        self._log('debug', 'Radially averaging images')
         img_hdrs = []
         all_counters = []
         load_path = ''
@@ -496,7 +562,13 @@ class raver_process(multiprocessing.Process):
                 self._ret_q.put_nowait([exp_id, profiles])
 
     def load_settings(self, settings_file):
+        self._log('debug', 'Loading RAW settings from %s' %(settings_file))
+
         self.raw_settings = raw.load_settings(settings_file)
+
+    def _log(self, level, msg):
+        with self._log_lock:
+            self._log_queue.put_nowait((level, '{} - {}'.format(self.name, msg)))
 
     def _abort(self):
         while True:
@@ -518,6 +590,9 @@ class save_thread(threading.Thread):
     def __init__(self, cmd_q, ret_q, abort_event, raw_settings):
         threading.Thread.__init__(self)
         self.daemon = True
+        self.name = 'save_thread'
+
+        logger.info("Initializing pipeline save profiles thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -544,19 +619,21 @@ class save_thread(threading.Thread):
                 cmd = None
 
             if cmd is not None:
-                print(cmd)
+                logger.debug("Processing cmd '%s'", cmd)
                 self._commands[cmd](*args)
 
             else:
                 time.sleep(0.1)
 
     def _save_profiles(self, output_dir, profiles):
+        logger.debug('Saving profiles')
 
         for profile in profiles:
             raw.save_profile(profile, datadir=output_dir,
                 settings=self.raw_settings)
 
     def _set_raw_settings(self, settings):
+        logger.debug('Setting RAW settings')
         self.raw_settings = settings
 
     def _abort(self):
