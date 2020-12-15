@@ -308,13 +308,19 @@ class pipeline_thread(threading.Thread):
 
     def _save_profiles(self, profile_data):
         exp_id, profiles = profile_data
-
+        print(self.experiments.keys())
+        print(exp_id)
         if self.pl_settings['save_raver_profiles']:
             if exp_id in self.experiments:
+                print('here')
                 profiles_dir = self.experiments[exp_id].profiles_dir
             else:
+                print('here2')
                 profiles_dir = self.profiles_dir
 
+            print(profiles_dir)
+            for prof in profiles:
+                print(prof.getParameter('filename'))
             if profiles_dir is not None:
                 self.s_cmd_q.append(['save_profiles', [profiles_dir, profiles]])
 

@@ -132,17 +132,19 @@ class monitor_and_load(threading.Thread):
 
             new_failed = []
             new_succeded = []
-            new_imgs = []
-            new_img_hdrs = []
-            new_counters = []
-            new_fnames = []
             got_new_images = False
 
             for item in self.waiting_for_header:
                 if self._abort_event.is_set():
                     break
 
-                img, initial_t = item
+                img, initial_t, exp_id, data_dir = item
+
+                if exp_id is None:
+                    exp_id = self._exp_id
+
+                if data_dir is None:
+                    data_dir = self.data_dir
 
                 if time.time() - initial_t > self.header_timeout:
                     new_failed.append(item)
@@ -154,27 +156,15 @@ class monitor_and_load(threading.Thread):
                     if len(imgs) > 0:
                         new_succeded.append(item)
 
-                        new_imgs.extend(imgs)
-                        new_img_hdrs.extend(img_hdrs)
-                        new_counters.extend(counters)
-                        new_fnames.extend(fnames)
+                        self._ret_q.append([imgs, img_hdrs, counters, fnames,
+                            exp_id, data_dir])
 
-                if len(imgs) >= self.ret_every:
-                    self._ret_q.append([new_imgs, new_img_hdrs,
-                        new_counters, new_fnames, self._exp_id, self.data_dir])
-                    new_imgs = []
-                    new_img_hdrs = []
-                    new_counters = []
-                    new_fnames = []
+
 
             if self._abort_event.is_set():
                 self._abort()
                 new_failed = []
                 new_succeded = []
-                new_imgs = []
-                new_img_hdrs = []
-                new_counters = []
-                new_fnames = []
 
             for item in new_failed:
                 self.failed.append(item)
@@ -186,48 +176,60 @@ class monitor_and_load(threading.Thread):
             try:
                 new_images = []
                 while len(self._monitor_ret_q) > 0:
-                    images = self._monitor_ret_q.popleft()
-                    new_images.extend(images)
+                    img_data = self._monitor_ret_q.popleft()
+                    new_images.append(img_data)
             except IndexError:
                 new_images = []
 
-            for img in new_images:
-                if self._abort_event.is_set():
-                    break
-
-                imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
-
-                if len(imgs) > 0:
-                    new_imgs.extend(imgs)
-                    new_img_hdrs.extend(img_hdrs)
-                    new_counters.extend(counters)
-                    new_fnames.extend(fnames)
-
-                    got_new_images = True
-
-                else:
-                    self.waiting_for_header.append((img, time.time()))
-
-                if len(imgs) >= self.ret_every:
-                    self._ret_q.append([new_imgs, new_img_hdrs,
-                        new_counters, new_fnames, self._exp_id, self.data_dir])
-                    new_imgs = []
-                    new_img_hdrs = []
-                    new_counters = []
-                    new_fnames = []
-
-            if self._abort_event.is_set():
-                self._abort()
-                new_failed = []
-                new_succeded = []
+            for img_data in new_images:
                 new_imgs = []
                 new_img_hdrs = []
                 new_counters = []
                 new_fnames = []
 
-            if new_imgs:
-                self._ret_q.append([new_imgs, new_fnames, new_img_hdrs,
-                    new_counters, self._exp_id, self.data_dir])
+                exp_id = img_data[0]
+                data_dir = img_data[1]
+                imgs = img_data[2]
+
+                if exp_id is None:
+                    exp_id = self._exp_id
+
+                if data_dir is None:
+                    data_dir = self.data_dir
+
+                for img in imgs:
+                    if self._abort_event.is_set():
+                        break
+
+                    imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
+
+                    if len(imgs) > 0:
+                        new_imgs.extend(imgs)
+                        new_img_hdrs.extend(img_hdrs)
+                        new_counters.extend(counters)
+                        new_fnames.extend(fnames)
+
+                        got_new_images = True
+
+                    else:
+                        self.waiting_for_header.append((img, time.time(), exp_id, data_dir))
+
+                    if len(imgs) >= self.ret_every:
+                        self._ret_q.append([new_imgs, new_img_hdrs,
+                            new_counters, new_fnames, exp_id, data_dir])
+                        new_imgs = []
+                        new_img_hdrs = []
+                        new_counters = []
+                        new_fnames = []
+
+                if new_imgs:
+                    self._ret_q.append([new_imgs, new_fnames, new_img_hdrs,
+                        new_counters, exp_id, data_dir])
+
+            if self._abort_event.is_set():
+                self._abort()
+                new_failed = []
+                new_succeded = []
 
             if not got_new_images:
                 time.sleep(0.1)
@@ -247,7 +249,9 @@ class monitor_and_load(threading.Thread):
 
     def _set_experiment(self, data_dir, fprefix, exp_id):
         self._exp_id = exp_id
-        self._set_data_dir_fprefix(data_dir, fprefix)
+        self.data_dir = data_dir
+
+        self._monitor_cmd_q.append(['set_experiment', [data_dir, fprefix, exp_id]])
 
     def _set_ret_size(self, size):
         self.ret_every = int(size)
@@ -307,12 +311,15 @@ class monitor_thread(threading.Thread):
         self.img_exts = self.pipeline_settings['image_exts']
         self.fprefix = ''
 
+        self._exp_id = None
         self.data_dir = None
         self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
 
         self._commands = {'set_data_dir': self._set_data_dir,
             'set_fprefix': self._set_fprefix,
-            'set_data_dir_and_fprefix': self._set_data_dir_fprefix}
+            'set_data_dir_and_fprefix': self._set_data_dir_fprefix,
+            'set_experiment': self._set_experiment,
+            }
 
     def run(self):
         while True:
@@ -339,7 +346,7 @@ class monitor_thread(threading.Thread):
                     self._abort()
 
                 if new_images:
-                    self._ret_q.append(new_images)
+                    self._ret_q.append([self._exp_id, self.data_dir, new_images])
                 else:
                     time.sleep(0.1)
             else:
@@ -356,6 +363,10 @@ class monitor_thread(threading.Thread):
     def _set_data_dir_fprefix(self, data_dir, fprefix):
         self._set_fprefix(fprefix)
         self._set_data_dir(data_dir)
+
+    def _set_experiment(self, data_dir, fprefix, exp_id):
+        self._exp_id = exp_id
+        self._set_data_dir_fprefix(data_dir, fprefix)
 
     def _check_for_new_files(self):
 
