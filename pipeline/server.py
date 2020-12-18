@@ -67,7 +67,7 @@ class ControlServer(threading.Thread):
         self.ip = ip
         self.port = port
         self.pipeline_cmd_q = pipeline_cmd_q
-        self.pipleine_ret_q = pipeline_ret_q
+        self.pipeline_ret_q = pipeline_ret_q
 
         self._stop_event = threading.Event()
 
@@ -141,7 +141,7 @@ class ControlServer(threading.Thread):
         if self._stop_event.is_set():
             self._stop_event.clear()
 
-        logger.info("Quitting pump control thread: %s", self.name)
+        logger.info("Quitting control server: %s", self.name)
 
     def stop(self):
         """Stops the thread cleanly."""
@@ -149,9 +149,6 @@ class ControlServer(threading.Thread):
         self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
         self.socket.close()
         self.context.destroy()
-
-        for device in self._device_control:
-            self._device_control[device]['abort'].set()
 
         self._stop_event.set()
 

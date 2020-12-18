@@ -108,7 +108,7 @@ class monitor_and_load(threading.Thread):
         self.daemon = True
         self.name = 'monitor_and_load_thread'
 
-        logger.info("Initializing pipeline monitor and load thread")
+        logger.debug("Initializing pipeline monitor and load thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -263,10 +263,10 @@ class monitor_and_load(threading.Thread):
             if not got_new_images:
                 time.sleep(0.1)
 
-        logger.info("Quitting pipeline monitor_and_load thread")
+        logger.debug("Quitting pipeline monitor_and_load thread")
 
     def _set_data_dir(self, data_dir):
-        logging.debug('Setting data directory: %s', data_dir)
+        logger.debug('Setting data directory: %s', data_dir)
 
         self._monitor_cmd_q.append(['set_data_dir', [data_dir,]])
 
@@ -276,7 +276,7 @@ class monitor_and_load(threading.Thread):
         self._monitor_cmd_q.append(['set_fprefix', [fprefix,]])
 
     def _set_data_dir_fprefix(self, data_dir, fprefix):
-        logging.debug('Setting data directory: %s', data_dir)
+        logger.debug('Setting data directory: %s', data_dir)
 
         self._monitor_cmd_q.append(['set_data_dir_and_fprefix', [data_dir, fprefix]])
 
@@ -345,7 +345,7 @@ class monitor_thread(threading.Thread):
         self.daemon = True
         self.name = 'monitor_thread'
 
-        logger.info("Initializing pipeline monitor thread")
+        logger.debug("Initializing pipeline monitor thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -353,7 +353,6 @@ class monitor_thread(threading.Thread):
         self._stop_event = threading.Event()
 
         self.pipeline_settings = pipeline_settings
-        self.img_exts = self.pipeline_settings['image_exts']
         self.fprefix = ''
 
         self._exp_id = None
@@ -399,7 +398,7 @@ class monitor_thread(threading.Thread):
             else:
                 time.sleep(0.1)
 
-        logger.info("Quitting pipeline monitor thread")
+        logger.debug("Quitting pipeline monitor thread")
 
     def _set_data_dir(self, data_dir):
         logger.debug('Setting data directory: %s', data_dir)
@@ -438,7 +437,7 @@ class monitor_thread(threading.Thread):
                 new_images = []
                 self._abort()
 
-            if (os.path.splitext(f)[1] in self.img_exts
+            if (os.path.splitext(f)[1] in self.pipeline_settings['image_exts']
                 and os.path.split(f)[1].startswith(self.fprefix)):
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
@@ -466,9 +465,6 @@ class raver_process(multiprocessing.Process):
         raw_settings_file, log_lock, log_queue):
         multiprocessing.Process.__init__(self)
         self.daemon = True
-        self.name = 'raver_process'
-
-        logger.info("Initializing pipeline radial averaging process")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -479,6 +475,8 @@ class raver_process(multiprocessing.Process):
 
         self._log_lock = log_lock
         self._log_queue = log_queue
+
+        self._log('debug', "Initializing pipeline radial averaging process")
 
         self.raw_settings = raw.load_settings(raw_settings_file)
 
@@ -509,6 +507,8 @@ class raver_process(multiprocessing.Process):
             else:
                 time.sleep(0.1)
 
+        self._log('debug', "Quiting reduction process")
+
     def _raver_images(self, exp_id, *args, **kwargs):
         self._log('debug', 'Radially averaging images')
         img_hdrs = []
@@ -536,6 +536,10 @@ class raver_process(multiprocessing.Process):
         profiles = []
 
         for i, image in enumerate(imgs):
+            if self._abort_event.is_set():
+                self._abort()
+                break
+
             try:
                 img_hdr = img_hdrs[i]
             except Exception:
@@ -578,6 +582,12 @@ class raver_process(multiprocessing.Process):
             except queue.Empty:
                 break
 
+        with self._ret_lock:
+            self._ret_q.put_nowait('aborted')
+
+        while self._abort_event.is_set():
+            time.sleep(0.1)
+
     def stop(self):
         """Stops the thread cleanly."""
         self._stop_event.set()
@@ -592,7 +602,7 @@ class save_thread(threading.Thread):
         self.daemon = True
         self.name = 'save_thread'
 
-        logger.info("Initializing pipeline save profiles thread")
+        logger.debug("Initializing pipeline save profiles thread")
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
@@ -624,6 +634,8 @@ class save_thread(threading.Thread):
 
             else:
                 time.sleep(0.1)
+
+        logger.debug("Quitting save thread")
 
     def _save_profiles(self, output_dir, profiles):
         logger.debug('Saving profiles')

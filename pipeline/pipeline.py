@@ -33,15 +33,17 @@ if __name__ != '__main__':
 
 import bioxtasraw.RAWAPI as raw
 
-from .analysis import analyze
-from .reports import pdf
-from .reduction import reduce_data
+pipeline_path = os.path.abspath(os.path.join('.', __file__, '..', '..'))
+if pipeline_path not in os.sys.path:
+    os.sys.path.append(pipeline_path)
+
+from pipeline.analysis import analyze
+from pipeline.reduction import reduce_data
 
 
 class pipeline_thread(threading.Thread):
 
-    def __init__(self, cmd_q, ret_q, abort_event, pipeline_settings,
-        raw_settings_file):
+    def __init__(self, cmd_q, ret_q, abort_event, pipeline_settings):
         threading.Thread.__init__(self)
         self.daemon = True
         self.name = 'pipeline_ctrl_thread'
@@ -54,7 +56,7 @@ class pipeline_thread(threading.Thread):
         self._stop_event = threading.Event()
 
         self.pl_settings = pipeline_settings
-        self.raw_settings_file = raw_settings_file
+        self.raw_settings_file = self.pl_settings['raw_settings_file']
         self.raw_settings = raw.load_settings(self.raw_settings_file)
 
         self.data_dir = None
@@ -63,6 +65,11 @@ class pipeline_thread(threading.Thread):
         self.analysis_dir = None
 
         self.fprefix = ''
+
+        self.num_loaded = 0
+        self.num_averaged = 0
+        self.exp_processed  = 0
+        self.exp_being_processed = 0
 
         self.experiments = {}
         self.current_experiment = ''
@@ -83,6 +90,7 @@ class pipeline_thread(threading.Thread):
             'start_experiment'  : self._start_experiment,
             'stop_experiment'   : self._stop_experiment,
             'update_pipeline_settings': self._update_pipeline_settings,
+            'update_analysis_args'  : self._set_analysis_args,
             }
 
         #Initialize monitoring thread
@@ -177,6 +185,8 @@ class pipeline_thread(threading.Thread):
                 if data_dir is None:
                     data_dir = self.data_dir
 
+                self.num_loaded += len(img_data[0])
+
                 self.active = True
                 with self.r_cmd_lock:
                     self.r_cmd_q.put_nowait(['raver_images', exp_id, img_data,
@@ -190,6 +200,8 @@ class pipeline_thread(threading.Thread):
 
             if profile_data is not None:
                 self.active = True
+
+                self.num_averaged += len(profile_data[1])
 
                 self._save_profiles(profile_data)
                 self._add_profiles_to_experiment(profile_data)
@@ -237,7 +249,7 @@ class pipeline_thread(threading.Thread):
         self.analysis_processes.append(proc)
 
     def _set_data_dir(self, data_dir):
-        logger.debug('Setting data directory: %s'. data_dir)
+        logger.debug('Setting data directory: %s', data_dir)
 
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
@@ -372,6 +384,7 @@ class pipeline_thread(threading.Thread):
 
     def _save_profiles(self, profile_data):
         logger.debug('Saving profiles')
+        logger.debug('Profile data: {}'.format(profile_data))
 
         exp_id, profiles = profile_data
 
@@ -406,6 +419,8 @@ class pipeline_thread(threading.Thread):
                 self.active = True
 
                 logger.info('Experiment %s data collection finished', exp.exp_name)
+
+                self.exp_being_processed += 1
 
                 with self.a_cmd_lock:
                     if exp.exp_type == 'SEC':
@@ -459,6 +474,9 @@ class pipeline_thread(threading.Thread):
             if exp.analysis_finished:
                 logger.info('Experiment %s analysis finished', exp.exp_name)
 
+                self.exp_being_processed += -1
+                self.exp_processed += 1
+
                 self._ret_q.append(exp)
                 del self.experiments[exp.exp_name]
 
@@ -478,6 +496,8 @@ class pipeline_thread(threading.Thread):
             'use_atsas'     : self.pl_settings['use_atsas'],
             }
 
+        logger.debug('Analysis arguments: {}'.format(self._analysis_args))
+
     def _update_pipeline_settings(self, *args, **kwargs):
         logger.debug('Updating pipeline settings: %s',
             ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
@@ -489,22 +509,60 @@ class pipeline_thread(threading.Thread):
         self._set_analysis_args()
 
     def _abort(self):
+        logger.debug('Aborting pipeline')
+        self._abort_event.set()
+
         self._cmd_q.clear()
         self._ret_q.clear()
 
         self.r_abort_event.set()
         self.a_abort_event.set()
 
+        r_aborts = 0
+
+        while r_aborts < len(self.reduction_processes):
+            try:
+                with self.r_ret_lock:
+                    ret = self.r_ret_q.get_nowait()
+
+                if ret == 'aborted':
+                    r_aborts += 1
+
+            except queue.Empty:
+                time.sleep(0.1)
+
+        a_aborts = 0
+
+        while a_aborts < len(self.analysis_processes):
+            try:
+                with self.a_ret_lock:
+                    ret = self.a_ret_q.get_nowait()
+
+                if ret == 'aborted':
+                    a_aborts += 1
+
+            except queue.Empty:
+                time.sleep(0.1)
+
+        self.r_abort_event.clear()
+        self.a_abort_event.clear()
+
         self._abort_event.clear()
 
     def stop(self):
         """Stops the thread cleanly."""
+        # self._abort()
+        self._abort_event.set()
+
+        while self._abort_event.is_set():
+            time.sleep(0.1)
 
         self.monitor_thread.stop()
         self.monitor_thread.join()
 
         self.save_thread.stop()
         self.save_thread.join()
+
 
         for proc in self.analysis_processes:
             proc.stop()

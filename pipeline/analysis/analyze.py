@@ -968,6 +968,8 @@ class analysis_process(multiprocessing.Process):
         self._log_lock = log_lock
         self._log_queue = log_q
 
+        self._log('debug', "Initializing pipeline analysis process")
+
         self.raw_settings = raw.load_settings(raw_settings_file)
 
         self._commands = {'process_profile': self._proc_profile,
@@ -998,6 +1000,8 @@ class analysis_process(multiprocessing.Process):
 
             else:
                 time.sleep(0.1)
+
+        self._log('debug', "Quiting analysis process")
 
     def _proc_profile(self, exp_id, *args, **kwargs):
         self._log('debug', 'Processing profile for experiment %s' %(exp_id))
@@ -1122,6 +1126,12 @@ class analysis_process(multiprocessing.Process):
 
     def _make_and_subtract_series(self, profiles, out_dir, save_processed):
         self._log('debug', 'Making and subtracting series')
+
+        for prof in profiles:
+            try:
+                int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1])
+            except Exception:
+                self._log('debug', prof.getParameter('filename'))
 
         profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
 
@@ -1305,6 +1315,12 @@ class analysis_process(multiprocessing.Process):
                     cmd, args, kwargs = self._cmd_q.get_nowait()
             except queue.Empty:
                 break
+
+        with self._ret_lock:
+            self._ret_q.put_nowait('aborted')
+
+        while self._abort_event.is_set():
+            time.sleep(0.1)
 
     def stop(self):
         """Stops the thread cleanly."""
