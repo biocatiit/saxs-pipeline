@@ -68,7 +68,7 @@ class ControlClient(threading.Thread):
 
         self.connect_error = 0
 
-        self.heartbeat = 5
+        self.heartbeat = 60
         self.last_ping = 0
 
         self.resend_missed_commands_on_reconnect = True

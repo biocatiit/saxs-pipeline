@@ -87,22 +87,22 @@ class StatusPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_HORIZONTAL)
 
 
-        raver_label = wx.StaticText(ctrl_box, label='Radial average processes:')
-        self.raver_ctrl = wx.StaticText(ctrl_box, size=self._FromDIP((40, -1)))
-        raver_add = wx.Button(ctrl_box, label='Add')
+        # raver_label = wx.StaticText(ctrl_box, label='Radial average processes:')
+        # self.raver_ctrl = wx.StaticText(ctrl_box, size=self._FromDIP((40, -1)))
+        # raver_add = wx.Button(ctrl_box, label='Add')
 
         analysis_label = wx.StaticText(ctrl_box, label='Analysis processes:')
         self.analysis_ctrl = wx.StaticText(ctrl_box, size=self._FromDIP((40, -1)))
         analysis_add = wx.Button(ctrl_box, label='Add')
 
-        raver_add.Bind(wx.EVT_BUTTON, self._add_raver_proc)
+        # raver_add.Bind(wx.EVT_BUTTON, self._add_raver_proc)
         analysis_add.Bind(wx.EVT_BUTTON, self._add_analysis_proc)
 
         ctrl_grid_sizer_2 = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
-        ctrl_grid_sizer_2.Add(raver_label, flag=wx.ALIGN_CENTER_VERTICAL)
-        ctrl_grid_sizer_2.Add(self.raver_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
-        ctrl_grid_sizer_2.Add(raver_add, flag=wx.ALIGN_CENTER_VERTICAL)
+        # ctrl_grid_sizer_2.Add(raver_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        # ctrl_grid_sizer_2.Add(self.raver_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        # ctrl_grid_sizer_2.Add(raver_add, flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_grid_sizer_2.Add(analysis_label, flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_grid_sizer_2.Add(self.analysis_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_grid_sizer_2.Add(analysis_add, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -286,8 +286,8 @@ class StatusPanel(wx.Panel):
             fprefix = pt.fprefix
             num_rproc = str(len(pt.reduction_processes))
             num_aproc = str(len(pt.analysis_processes))
-            images_loaded = str(pt.num_loaded)
-            images_averaged = str(pt.num_averaged)
+            images_loaded = str(pt.get_num_loaded())
+            images_averaged = str(pt.get_num_averaged())
             current_exps = str(len(pt.experiments))
             exp_being_processed = str(pt.exp_being_processed)
             processed_exps = str(pt.exp_processed)
@@ -312,9 +312,9 @@ class StatusPanel(wx.Panel):
                 self.fprefix_ctrl.SetValue(fprefix)
                 self.fprefix = fprefix
 
-            if num_rproc != self.num_rproc:
-                self.raver_ctrl.SetLabel(num_rproc)
-                self.num_rproc = num_rproc
+            # if num_rproc != self.num_rproc:
+            #     self.raver_ctrl.SetLabel(num_rproc)
+            #     self.num_rproc = num_rproc
 
             if num_aproc != self.num_aproc:
                 self.analysis_ctrl.SetLabel(num_aproc)

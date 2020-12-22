@@ -27,6 +27,7 @@ import os
 import collections
 import copy
 import logging
+import traceback
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -66,8 +67,6 @@ class pipeline_thread(threading.Thread):
 
         self.fprefix = ''
 
-        self.num_loaded = 0
-        self.num_averaged = 0
         self.exp_processed  = 0
         self.exp_being_processed = 0
 
@@ -92,17 +91,6 @@ class pipeline_thread(threading.Thread):
             'update_pipeline_settings': self._update_pipeline_settings,
             'update_analysis_args'  : self._set_analysis_args,
             }
-
-        #Initialize monitoring thread
-        self.m_cmd_q = collections.deque()
-        self.m_ret_q = collections.deque()
-        self.m_abort_event = threading.Event()
-
-        self.monitor_thread = reduce_data.monitor_and_load(self.m_cmd_q,
-            self.m_ret_q, self.m_abort_event, self.raw_settings,
-            self.pl_settings)
-
-        self.monitor_thread.start()
 
         #Initialize save thread
         self.s_cmd_q = collections.deque()
@@ -140,7 +128,15 @@ class pipeline_thread(threading.Thread):
         self.mp_log_thread = mp_log_thread(self.mp_log_lock, self.mp_log_queue)
         self.mp_log_thread.start()
 
-        for i in range(self.pl_settings['r_procs']):
+        self.num_loaded = self.manager.Value('i', 0)
+        self.num_averaged = self.manager.Value('i', 0)
+
+        # For the moment, current architechture doesn't allow more than 1 reduction process
+        # Can revist if necessary, will leave everything in place.
+        # for i in range(self.pl_settings['r_procs']):
+        #     self._start_reduction_process()
+
+        for i in range(1):
             self._start_reduction_process()
 
         for i in range(self.pl_settings['a_procs']):
@@ -148,90 +144,72 @@ class pipeline_thread(threading.Thread):
 
     def run(self):
         while True:
-            self.active = False
-
-            if self._stop_event.is_set():
-                break
-
-            if self._abort_event.is_set():
-                self._abort()
-
             try:
-                cmd, args, kwargs = self._cmd_q.popleft()
-            except IndexError:
-                cmd = None
+                self.active = False
 
-            if cmd is not None:
-                logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
-                    cmd, ', '.join(['{}'.format(a) for a in args]),
-                    ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
+                if self._stop_event.is_set():
+                    break
 
-                self._commands[cmd](*args, **kwargs)
+                if self._abort_event.is_set():
+                    self._abort()
 
-            # Need to wrap this and the ret_q in a while, and get all things in the q?
-            try:
-                img_data = self.m_ret_q.popleft()
-            except IndexError:
-                img_data = None
+                try:
+                    cmd, args, kwargs = self._cmd_q.popleft()
+                except IndexError:
+                    cmd = None
 
-            if img_data is not None:
-                exp_id = img_data[-2]
-                data_dir = img_data[-1]
-                img_data = img_data[:-2]
+                if cmd is not None:
+                    logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
+                        cmd, ', '.join(['{}'.format(a) for a in args]),
+                        ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
 
-                if exp_id is None:
-                    exp_id = self.current_experiment
+                    self._commands[cmd](*args, **kwargs)
 
-                if data_dir is None:
-                    data_dir = self.data_dir
+                try:
+                    with self.r_ret_lock:
+                        profile_data = self.r_ret_q.get_nowait()
+                except queue.Empty:
+                    profile_data = None
 
-                self.num_loaded += len(img_data[0])
+                if profile_data is not None:
+                    self.active = True
 
-                self.active = True
-                with self.r_cmd_lock:
-                    self.r_cmd_q.put_nowait(['raver_images', exp_id, img_data,
-                        {'load_path': data_dir}])
+                    self._save_profiles(profile_data)
+                    self._add_profiles_to_experiment(profile_data)
 
-            try:
-                with self.r_ret_lock:
-                    profile_data = self.r_ret_q.get_nowait()
-            except queue.Empty:
-                profile_data = None
+                self._check_exp_status()
 
-            if profile_data is not None:
-                self.active = True
+                try:
+                    with self.a_ret_lock:
+                        results = self.a_ret_q.get_nowait()
+                except queue.Empty:
+                    results = None
 
-                self.num_averaged += len(profile_data[1])
+                if results is not None:
+                    self.active = True
 
-                self._save_profiles(profile_data)
-                self._add_profiles_to_experiment(profile_data)
+                    self._add_analysis_to_experiment(results)
 
-            self._check_exp_status()
+                self._check_analysis_status()
 
-            try:
-                with self.a_ret_lock:
-                    results = self.a_ret_q.get_nowait()
-            except queue.Empty:
-                results = None
+                if not self.active:
+                    time.sleep(0.1)
 
-            if results is not None:
-                self.active = True
-
-                self._add_analysis_to_experiment(results)
-
-            self._check_analysis_status()
-
-            if not self.active:
-                time.sleep(0.1)
+            except Exception:
+                logger.error('Error in pipeline thread:\n{}'.format(traceback.format_exc()))
 
         logger.info("Quitting pipeline control thread")
 
     def _start_reduction_process(self):
         logger.debug('Starting reduction process %i', len(self.reduction_processes)+1)
 
+        managed_internal_q = self.manager.Queue()
+
         proc = reduce_data.raver_process(self.r_cmd_q, self.r_ret_q,
             self.r_cmd_lock, self.r_ret_lock, self.r_abort_event,
-            self.raw_settings_file, self.mp_log_lock, self.mp_log_queue)
+            self.raw_settings_file, self.pl_settings, self.mp_log_lock,
+            self.mp_log_queue, managed_internal_q, self.num_loaded,
+            self.num_averaged)
 
         proc.start()
 
@@ -259,14 +237,14 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.m_cmd_q.append(['set_data_dir', [self.data_dir]])
+        self.r_cmd_q.put_nowait(['set_data_dir', [self.data_dir], {}])
 
     def _set_fprefix(self, fprefix):
         logger.debug('Setting file prefix: %s' %fprefix)
 
         self.fprefix = fprefix
 
-        self.m_cmd_q.append(['set_fprefix', [self.fprefix]])
+        self.r_cmd_q.put_nowait(['set_fprefix', [self.fprefix], {}])
 
     def _set_data_dir_and_fprefix(self, data_dir, fprefix):
         logger.debug('Setting data directory and file prefix: %s, %s', data_dir,
@@ -281,8 +259,8 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.m_cmd_q.append(['set_data_dir_and_fprefix', [self.data_dir,
-            self.fprefix]])
+        self.r_cmd_q.put_nowait(['set_data_dir_and_fprefix', [self.data_dir,
+            self.fprefix], {}])
 
     def _set_output_dir(self, output_dir):
         logger.debug('Setting output directory: %s', output_dir)
@@ -334,7 +312,7 @@ class pipeline_thread(threading.Thread):
 
         self.raw_settings = raw.load_settings(raw_settings_file)
 
-        self.m_cmd_q.append(['set_raw_settings', [self.raw_settings]])
+        # self.m_cmd_q.append(['set_raw_settings', [self.raw_settings]])
         self.s_cmd_q.append(['set_raw_settings', [self.raw_settings]])
 
         for proc in self.reduction_processes:
@@ -373,8 +351,8 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.m_cmd_q.append(['set_experiment', [self.data_dir,
-            self.fprefix, self.current_experiment]])
+        self.r_cmd_q.put_nowait(['set_experiment', [self.data_dir,
+            self.fprefix, self.current_experiment], {}])
 
     def _stop_experiment(self, exp_name):
         logger.debug('Stopping experiment %s', exp_name)
@@ -500,6 +478,7 @@ class pipeline_thread(threading.Thread):
         logger.debug('Analysis arguments: {}'.format(self._analysis_args))
 
     def _update_pipeline_settings(self, *args, **kwargs):
+
         logger.debug('Updating pipeline settings: %s',
             ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
 
@@ -507,7 +486,15 @@ class pipeline_thread(threading.Thread):
             if key in self.pl_settings:
                 self.pl_settings[key] = kwargs[key]
 
+        self.r_cmd_q.put_nowait(['update_pipeline_settings', args, kwargs])
+
         self._set_analysis_args()
+
+    def get_num_loaded(self):
+        return copy.copy(self.num_loaded.get())
+
+    def get_num_averaged(self):
+        return copy.copy(self.num_averaged.get())
 
     def _abort(self):
         logger.debug('Aborting pipeline')
@@ -515,6 +502,8 @@ class pipeline_thread(threading.Thread):
 
         self._cmd_q.clear()
         self._ret_q.clear()
+
+        self.s_abort_event.set()
 
         self.r_abort_event.set()
         self.a_abort_event.set()
@@ -561,8 +550,8 @@ class pipeline_thread(threading.Thread):
         while self._abort_event.is_set():
             time.sleep(0.1)
 
-        self.monitor_thread.stop()
-        self.monitor_thread.join()
+        # self.monitor_thread.stop()
+        # self.monitor_thread.join()
 
         self.save_thread.stop()
         self.save_thread.join()
@@ -597,19 +586,22 @@ class mp_log_thread(threading.Thread):
 
     def run(self):
         while True:
-            if self._stop_event.is_set():
-                break
-
             try:
-                with self._log_lock:
-                    level, log = self._log_queue.get_nowait()
-                func = getattr(logger, level)
-                func(log)
-            except queue.Empty:
-                log = None
+                if self._stop_event.is_set():
+                    break
 
-            if log is None:
-                time.sleep(0.1)
+                try:
+                    with self._log_lock:
+                        level, log = self._log_queue.get_nowait()
+                    func = getattr(logger, level)
+                    func(log)
+                except queue.Empty:
+                    log = None
+
+                if log is None:
+                    time.sleep(0.1)
+            except Exception:
+                logger.error('Error in log thread:\n{}'.format(traceback.format_exc()))
 
     def stop(self):
         """Stops the thread cleanly."""

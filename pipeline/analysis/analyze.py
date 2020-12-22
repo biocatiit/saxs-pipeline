@@ -984,24 +984,32 @@ class analysis_process(multiprocessing.Process):
         self.raw_settings = raw.load_settings(self.raw_settings_file)
 
         while True:
-            if self._stop_event.is_set():
-                break
-
-            if self._abort_event.is_set():
-                self._abort()
-
             try:
-                with self._cmd_lock:
-                    cmd, exp_id, args, kwargs = self._cmd_q.get_nowait()
-            except queue.Empty:
-                cmd = None
+                if self._stop_event.is_set():
+                    break
 
-            if cmd is not None:
-                self._log('info', "Processing cmd '%s'" %(cmd))
-                self._commands[cmd](exp_id, *args, **kwargs)
+                if self._abort_event.is_set():
+                    self._abort()
 
-            else:
-                time.sleep(0.1)
+                try:
+                    with self._cmd_lock:
+                        cmd, exp_id, args, kwargs = self._cmd_q.get_nowait()
+                except queue.Empty:
+                    cmd = None
+
+                if cmd is not None:
+                    self._log('info', "Processing cmd '%s'" %(cmd))
+                    self._commands[cmd](exp_id, *args, **kwargs)
+
+                else:
+                    time.sleep(0.1)
+
+            except Exception:
+                self._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+
+            except KeyboardInterrupt:
+                self._abort()
+                break
 
         self._log('debug', "Quiting analysis process")
 
