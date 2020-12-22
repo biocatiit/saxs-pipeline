@@ -74,68 +74,71 @@ class ControlServer(threading.Thread):
 
         while True:
             try:
-                if self.socket.poll(10) > 0:
-                    logger.debug("Getting new command")
-                    command = self.socket.recv_json()
-                else:
-                    command = None
-            except Exception:
-                command = None
-
-            if self._stop_event.is_set():
-                logger.debug("Stop event detected")
-                break
-
-            self._process_responses()
-
-            if command is not None:
-                cmd = command['command']
-                get_response = command['response']
-                if cmd[0] == 'ping':
-                    logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ",
-                        cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
-                        ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
-                else:
-                    logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
-                        cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
-                        ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
-
                 try:
-                    if cmd[0] == 'ping':
-                        answer = 'ping received'
-
+                    if self.socket.poll(10) > 0:
+                        logger.debug("Getting new command")
+                        command = self.socket.recv_json()
                     else:
-                        self.pipeline_cmd_q.append(cmd)
-
-                        if get_response:
-                            start_time = time.time()
-                            while len(self.pipeline_ret_q) == 0 and time.time()-start_time < 5:
-                                time.sleep(0.01)
-
-                            if len(self.pipeline_ret_q) == 0:
-                                answer = ''
-                            else:
-                                answer = self.pipeline_ret_q.popleft()
-                        else:
-                            answer = 'cmd sent'
-
-                    if answer == '':
-                        logger.exception('No response received from device')
-                    else:
-                        logger.debug('Sending command response: %s', answer)
-                        self.socket.send_json(answer)
-
+                        command = None
                 except Exception:
-                    cmd = command['command']
-                    msg = ("Failed to run command '%s' with args: %s and "
-                        "kwargs: %s. Exception follows:" %(cmd[0],
-                        ', '.join(['{}'.format(a) for a in cmd[1]]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()])))
-                    logger.exception(msg)
-                    logger.exception(traceback.print_exc())
+                    command = None
 
-            else:
-                time.sleep(0.01)
+                if self._stop_event.is_set():
+                    logger.debug("Stop event detected")
+                    break
+
+                self._process_responses()
+
+                if command is not None:
+                    cmd = command['command']
+                    get_response = command['response']
+                    if cmd[0] == 'ping':
+                        logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ",
+                            cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
+                            ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
+                    else:
+                        logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
+                            cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
+                            ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
+
+                    try:
+                        if cmd[0] == 'ping':
+                            answer = 'ping received'
+
+                        else:
+                            self.pipeline_cmd_q.append(cmd)
+
+                            if get_response:
+                                start_time = time.time()
+                                while len(self.pipeline_ret_q) == 0 and time.time()-start_time < 5:
+                                    time.sleep(0.01)
+
+                                if len(self.pipeline_ret_q) == 0:
+                                    answer = ''
+                                else:
+                                    answer = self.pipeline_ret_q.popleft()
+                            else:
+                                answer = 'cmd sent'
+
+                        if answer == '':
+                            logger.exception('No response received from device')
+                        else:
+                            logger.debug('Sending command response: %s', answer)
+                            self.socket.send_json(answer)
+
+                    except Exception:
+                        cmd = command['command']
+                        msg = ("Failed to run command '%s' with args: %s and "
+                            "kwargs: %s. Exception follows:" %(cmd[0],
+                            ', '.join(['{}'.format(a) for a in cmd[1]]),
+                            ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()])))
+                        logger.exception(msg)
+                        logger.exception(traceback.print_exc())
+
+                else:
+                    time.sleep(0.01)
+            except Exception:
+                logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
 
         self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
         self.socket.close(0)

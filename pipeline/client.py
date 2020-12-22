@@ -78,39 +78,43 @@ class ControlClient(threading.Thread):
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
         while True:
-            if time.time() - self.last_ping > self.heartbeat:
-                self.last_ping = time.time()
-                self._ping()
-
-            if len(self.command_queue) > 0:
-                # logger.debug("Getting new command")
-                command = self.command_queue.popleft()
-            else:
-                command = None
-
-            if self._abort_event.is_set():
-                logger.debug("Abort event detected")
-                self._abort()
-                command = None
-
-            if self._stop_event.is_set():
-                logger.debug("Stop event detected")
-                break
-
-            if command is not None:
-                # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()]))
-
-                if self.socket.closed:
+            try:
+                if time.time() - self.last_ping > self.heartbeat:
+                    self.last_ping = time.time()
                     self._ping()
 
-                if not self.socket.closed:
-                    self._send_cmd(command)
+                if len(self.command_queue) > 0:
+                    # logger.debug("Getting new command")
+                    command = self.command_queue.popleft()
+                else:
+                    command = None
 
-                elif self.resend_missed_commands_on_reconnect:
-                    self.missed_cmds.append(command)
+                if self._abort_event.is_set():
+                    logger.debug("Abort event detected")
+                    self._abort()
+                    command = None
 
-            else:
-                time.sleep(0.01)
+                if self._stop_event.is_set():
+                    logger.debug("Stop event detected")
+                    break
+
+                if command is not None:
+                    # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()]))
+
+                    if self.socket.closed:
+                        self._ping()
+
+                    if not self.socket.closed:
+                        self._send_cmd(command)
+
+                    elif self.resend_missed_commands_on_reconnect:
+                        self.missed_cmds.append(command)
+
+                else:
+                    time.sleep(0.01)
+
+            except Exception:
+                logger.error('Error in client thread:\n{}'.format(traceback.format_exc()))
 
         if self._stop_event.is_set():
             self._stop_event.clear()
