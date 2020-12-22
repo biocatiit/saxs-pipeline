@@ -71,15 +71,16 @@ class ControlServer(threading.Thread):
 
         self._stop_event = threading.Event()
 
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PAIR)
-        self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
-
-
     def run(self):
         """
         Custom run method for the thread.
         """
+
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.PAIR)
+        self.socket.set(zmq.LINGER, 0)
+        self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
+
         while True:
             try:
                 if self.socket.poll(10) > 0:
@@ -94,12 +95,19 @@ class ControlServer(threading.Thread):
                 logger.debug("Stop event detected")
                 break
 
+            self._process_responses()
+
             if command is not None:
                 cmd = command['command']
                 get_response = command['response']
-                logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
-                    cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
-                    ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
+                if cmd[0] == 'ping':
+                    logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ",
+                        cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
+                        ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
+                else:
+                    logger.info("Processing cmd '%s' with args: %s and kwargs: %s ",
+                        cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]),
+                        ', '.join(['{}: {}'.format(kw, item) for kw, item in cmd[2].items()]))
 
                 try:
                     if cmd[0] == 'ping':
@@ -138,17 +146,33 @@ class ControlServer(threading.Thread):
             else:
                 time.sleep(0.01)
 
+        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
+        self.socket.close(0)
+        self.context.destroy(0)
+
         if self._stop_event.is_set():
             self._stop_event.clear()
 
         logger.info("Quitting control server: %s", self.name)
 
+    def _process_responses(self):
+        while True:
+            try:
+                response = self.pipeline_ret_q.popleft()
+            except IndexError:
+                response = None
+
+            if response is not None:
+                pass
+                # Do things, if you ever want to, with the response. Like send
+                # it to another program or a database, etc
+
+            else:
+                break
+
     def stop(self):
         """Stops the thread cleanly."""
         # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
-        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
-        self.socket.close()
-        self.context.destroy()
 
         self._stop_event.set()
 

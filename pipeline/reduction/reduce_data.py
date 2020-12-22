@@ -185,10 +185,8 @@ class monitor_and_load(threading.Thread):
                     if len(imgs) > 0:
                         new_succeded.append(item)
 
-                        self._ret_q.append([imgs, img_hdrs, counters, fnames,
+                        self._ret_q.append([imgs, fnames, img_hdrs, counters,
                             exp_id, data_dir])
-
-
 
             if self._abort_event.is_set():
                 self._abort()
@@ -243,9 +241,9 @@ class monitor_and_load(threading.Thread):
                     else:
                         self.waiting_for_header.append((img, time.time(), exp_id, data_dir))
 
-                    if len(imgs) >= self.ret_every:
-                        self._ret_q.append([new_imgs, new_img_hdrs,
-                            new_counters, new_fnames, exp_id, data_dir])
+                    if len(new_imgs) >= self.ret_every:
+                        self._ret_q.append([new_imgs, new_fnames, new_img_hdrs,
+                            new_counters, exp_id, data_dir])
                         new_imgs = []
                         new_img_hdrs = []
                         new_counters = []
@@ -357,7 +355,6 @@ class monitor_thread(threading.Thread):
 
         self._exp_id = None
         self.data_dir = None
-        self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
 
         self._commands = {'set_data_dir': self._set_data_dir,
             'set_fprefix': self._set_fprefix,
@@ -366,6 +363,8 @@ class monitor_thread(threading.Thread):
             }
 
     def run(self):
+        self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
+
         while True:
             if self._stop_event.is_set():
                 break
@@ -475,10 +474,7 @@ class raver_process(multiprocessing.Process):
 
         self._log_lock = log_lock
         self._log_queue = log_queue
-
-        self._log('debug', "Initializing pipeline radial averaging process")
-
-        self.raw_settings = raw.load_settings(raw_settings_file)
+        self.raw_settings_file = raw_settings_file
 
         self._commands = {'raver_images': self._raver_images,
             }
@@ -486,6 +482,10 @@ class raver_process(multiprocessing.Process):
         self.ret_every = 10
 
     def run(self):
+        self._log('debug', "Starting pipeline radial averaging process")
+
+        self.raw_settings = raw.load_settings(self.raw_settings_file)
+
         while True:
             if self._stop_event.is_set():
                 break
@@ -567,7 +567,7 @@ class raver_process(multiprocessing.Process):
 
     def load_settings(self, settings_file):
         self._log('debug', 'Loading RAW settings from %s' %(settings_file))
-
+        self.raw_settings_file = settings_file
         self.raw_settings = raw.load_settings(settings_file)
 
     def _log(self, level, msg):

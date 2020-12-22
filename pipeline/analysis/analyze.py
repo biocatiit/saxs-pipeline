@@ -970,7 +970,7 @@ class analysis_process(multiprocessing.Process):
 
         self._log('debug', "Initializing pipeline analysis process")
 
-        self.raw_settings = raw.load_settings(raw_settings_file)
+        self.raw_settings_file = raw_settings_file
 
         self._commands = {'process_profile': self._proc_profile,
             'process_ift': self._proc_ift,
@@ -981,6 +981,8 @@ class analysis_process(multiprocessing.Process):
             }
 
     def run(self):
+        self.raw_settings = raw.load_settings(self.raw_settings_file)
+
         while True:
             if self._stop_event.is_set():
                 break
@@ -1101,7 +1103,7 @@ class analysis_process(multiprocessing.Process):
         with self._ret_lock:
             self._ret_q.put_nowait(['sub_series', exp_id, series, sub_profile])
 
-        if sub_profile is not None:
+        if sub_profile is not None and not self._abort_event.is_set():
             results = self._proc_data([sub_profile], [], out_dir,
                 save_processed, **kwargs)
 
@@ -1118,6 +1120,9 @@ class analysis_process(multiprocessing.Process):
             ift = None
             denss_data = None
             dammif_data = None
+
+            with self._ret_lock:
+                self._ret_q.put_nowait(['analysis_results', exp_id, None])
 
         if save_report:
             self._make_report(profile, ift, dammif_data, denss_data, report_dir,
@@ -1230,7 +1235,7 @@ class analysis_process(multiprocessing.Process):
         sub_profile, avg_sample_prof, avg_buffer_prof = self._average_and_subtract_batch(sample_profiles,
             buffer_profiles, out_dir, save_processed)
 
-        if sub_profile is not None:
+        if sub_profile is not None and not self._abort_event.is_set():
             results = self._proc_data([sub_profile], [], out_dir,
                 save_processed, **kwargs)
 
@@ -1247,6 +1252,9 @@ class analysis_process(multiprocessing.Process):
             ift = None
             denss_data = None
             dammif_data = None
+
+            with self._ret_lock:
+                self._ret_q.put_nowait(['analysis_results', exp_id, None])
 
         if save_report:
             self._make_report(profile, ift, dammif_data, denss_data, report_dir,
@@ -1302,6 +1310,7 @@ class analysis_process(multiprocessing.Process):
 
     def load_settings(self, settings_file):
         self._log('debug', 'Loading RAW settings from {}'.format(settings_file))
+        self.raw_settings_file = settings_file
         self.raw_settings = raw.load_settings(settings_file)
 
     def _log(self, level, msg):
@@ -1309,6 +1318,7 @@ class analysis_process(multiprocessing.Process):
             self._log_queue.put_nowait((level, '{} - {}'.format(self.name, msg)))
 
     def _abort(self):
+        self._log('debug', 'Aborting analysis')
         while True:
             try:
                 with self._cmd_lock:

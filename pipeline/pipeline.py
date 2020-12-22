@@ -454,10 +454,11 @@ class pipeline_thread(threading.Thread):
             elif res_type == 'analysis_results':
                 res_dict = results[2]
 
-                exp.sub_profile = res_dict['profile']
-                exp.ift = res_dict['ift']
-                exp.dammif_data = res_dict['dammif_data']
-                exp.denss_data = res_dict['denss_data']
+                if res_dict is not None:
+                    exp.sub_profile = res_dict['profile']
+                    exp.ift = res_dict['ift']
+                    exp.dammif_data = res_dict['dammif_data']
+                    exp.denss_data = res_dict['denss_data']
 
                 exp.analysis_last_modified = time.time()
                 exp.analysis_finished = True
@@ -540,6 +541,9 @@ class pipeline_thread(threading.Thread):
 
                 if ret == 'aborted':
                     a_aborts += 1
+
+                elif ret is not None:
+                    self._add_analysis_to_experiment(ret)
 
             except queue.Empty:
                 time.sleep(0.1)
