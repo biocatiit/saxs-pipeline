@@ -341,7 +341,5 @@ class StatusPanel(wx.Panel):
                 self.exp_proc_ctrl.SetLabel(processed_exps)
                 self.processed_exps = processed_exps
 
-            #Should readback the return queue so it doesn't fill up. Do something with it if desired
-
     def on_exit(self):
         self._status_timer.Stop()

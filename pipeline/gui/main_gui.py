@@ -46,13 +46,9 @@ if __name__ != '__main__':
 
 class PipelineFrame(wx.Frame):
     """
-    A lightweight frame allowing one to work with arbitrary number of pumps.
-    Only meant to be used when the pumpcon module is run directly,
-    rather than when it is imported into another program.
     """
     def __init__(self, server_ip, server_port, *args, **kwargs):
         """
-        Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
         super(PipelineFrame, self).__init__(None, *args, **kwargs)
         logger.debug('Setting up the BioFrame')

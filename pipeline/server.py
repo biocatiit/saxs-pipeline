@@ -45,19 +45,10 @@ from . import settings
 
 class ControlServer(threading.Thread):
     """
-
     """
 
     def __init__(self, ip, port, pipeline_cmd_q, pipeline_ret_q, name='ControlServer'):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_pumps``.
-
-        :param collections.deque command_queue: The queue used to pass commands to
-            the thread.
-
-        :param threading.Event stop_event: An event that is set when the thread
-            needs to abort, and otherwise is not set.
         """
         threading.Thread.__init__(self, name=name)
         self.daemon = True

@@ -584,7 +584,6 @@ class raver_process(mp.Process):
 
                     self._commands[cmd](*args, **kwargs)
 
-                # Need to wrap this and the ret_q in a while, and get all things in the q?
                 try:
                     img_data = self.m_ret_q.popleft()
                 except IndexError:
@@ -819,12 +818,3 @@ class save_thread(threading.Thread):
         """Stops the thread cleanly."""
         self._stop_event.set()
 
-"""
-To do:
-
-3) Consider using more advanced functions from the watchdog package:
-https://blog.magrathealabs.com/filesystem-events-monitoring-with-python-9f5329b651c3
-http://thepythoncorner.com/dev/how-to-create-a-watchdog-in-python-to-look-for-filesystem-changes/
-https://www.geeksforgeeks.org/create-a-watchdog-in-python-to-look-for-filesystem-changes/
-
-"""

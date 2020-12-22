@@ -313,7 +313,6 @@ class pipeline_thread(threading.Thread):
 
         self.raw_settings = raw.load_settings(raw_settings_file)
 
-        # self.m_cmd_q.append(['set_raw_settings', [self.raw_settings]])
         self.s_cmd_q.append(['set_raw_settings', [self.raw_settings]])
 
         for proc in self.reduction_processes:
@@ -483,9 +482,6 @@ class pipeline_thread(threading.Thread):
         logger.debug('Updating pipeline settings: %s',
             ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
 
-        # for key in kwargs.keys():
-        #     self.pl_settings[key] = kwargs[key]
-
         self.pl_settings.update(kwargs)
 
         self._set_analysis_args()
@@ -544,18 +540,13 @@ class pipeline_thread(threading.Thread):
 
     def stop(self):
         """Stops the thread cleanly."""
-        # self._abort()
         self._abort_event.set()
 
         while self._abort_event.is_set():
             time.sleep(0.1)
 
-        # self.monitor_thread.stop()
-        # self.monitor_thread.join()
-
         self.save_thread.stop()
         self.save_thread.join()
-
 
         for proc in self.analysis_processes:
             proc.stop()
@@ -570,8 +561,6 @@ class pipeline_thread(threading.Thread):
         self._stop_event.set()
 
 class mp_log_thread(threading.Thread):
-    #It's possible this would be more efficient as it's own process, but I'll
-    #leave it here as a thread for now, and do some testing if this is a limitation
 
     def __init__(self, log_lock, log_q):
         threading.Thread.__init__(self)
@@ -690,10 +679,3 @@ class Experiment(object):
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')
-
-
-"""
-Todos:
-3) Need to think about whether to wrap the calls to all the return queues to check for multiple items, so it moves everything along at once
-6) Batch mode processing!
-"""

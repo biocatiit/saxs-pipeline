@@ -44,14 +44,6 @@ class ControlClient(threading.Thread):
     def __init__(self, ip, port, command_queue, answer_queue, abort_event,
         timeout_event, name='ControlClient'):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_pumps``.
-
-        :param collections.deque command_queue: The queue used to pass commands to
-            the thread.
-
-        :param threading.Event abort_event: An event that is set when the thread
-            needs to abort, and otherwise is not set.
         """
         threading.Thread.__init__(self, name=name)
         self.daemon = True
@@ -259,7 +251,6 @@ class ControlClient(threading.Thread):
 
 
     def _abort(self):
-        """Clears the ``command_queue`` and aborts all current pump motions."""
         logger.info("Aborting remote client thread %s current and future commands", self.name)
         self.command_queue.clear()
         self._abort_event.clear()
