@@ -56,10 +56,6 @@ class pipeline_thread(threading.Thread):
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
-        self.pl_settings = pipeline_settings
-        self.raw_settings_file = self.pl_settings['raw_settings_file']
-        self.raw_settings = raw.load_settings(self.raw_settings_file)
-
         self.data_dir = None
         self.output_dir = None
         self.profiles_dir = None
@@ -75,8 +71,6 @@ class pipeline_thread(threading.Thread):
 
         self.active = False
 
-        self._set_analysis_args()
-
         self._commands = {'set_data_dir'    : self._set_data_dir,
             'set_fprefix'       : self._set_fprefix,
             'set_data_dir_and_fprefix'  : self._set_data_dir_and_fprefix,
@@ -91,16 +85,6 @@ class pipeline_thread(threading.Thread):
             'update_pipeline_settings': self._update_pipeline_settings,
             'update_analysis_args'  : self._set_analysis_args,
             }
-
-        #Initialize save thread
-        self.s_cmd_q = collections.deque()
-        self.s_ret_q = collections.deque()
-        self.s_abort_event = threading.Event()
-
-        self.save_thread = reduce_data.save_thread(self.s_cmd_q, self.s_ret_q,
-            self.s_abort_event, self.raw_settings)
-
-        self.save_thread.start()
 
         #Initialize reduction and analysis threads
         self.reduction_processes = []
@@ -130,6 +114,11 @@ class pipeline_thread(threading.Thread):
 
         self.num_loaded = self.manager.Value('i', 0)
         self.num_averaged = self.manager.Value('i', 0)
+        self.pl_settings = self.manager.dict()
+        self._update_pipeline_settings(**{kw : pipeline_settings[kw] for kw in pipeline_settings})
+
+        self.raw_settings_file = self.pl_settings['raw_settings_file']
+        self.raw_settings = raw.load_settings(self.raw_settings_file)
 
         # For the moment, current architechture doesn't allow more than 1 reduction process
         # Can revist if necessary, will leave everything in place.
@@ -141,6 +130,18 @@ class pipeline_thread(threading.Thread):
 
         for i in range(self.pl_settings['a_procs']):
             self._start_analysis_process()
+
+        #Initialize save thread
+        self.s_cmd_q = collections.deque()
+        self.s_ret_q = collections.deque()
+        self.s_abort_event = threading.Event()
+
+        self.save_thread = reduce_data.save_thread(self.s_cmd_q, self.s_ret_q,
+            self.s_abort_event, self.raw_settings)
+
+        self.save_thread.start()
+
+
 
     def run(self):
         while True:
@@ -482,11 +483,10 @@ class pipeline_thread(threading.Thread):
         logger.debug('Updating pipeline settings: %s',
             ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
 
-        for key in kwargs:
-            if key in self.pl_settings:
-                self.pl_settings[key] = kwargs[key]
+        # for key in kwargs.keys():
+        #     self.pl_settings[key] = kwargs[key]
 
-        self.r_cmd_q.put_nowait(['update_pipeline_settings', args, kwargs])
+        self.pl_settings.update(kwargs)
 
         self._set_analysis_args()
 

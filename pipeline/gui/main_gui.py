@@ -128,9 +128,9 @@ class PipelineFrame(wx.Frame):
         self._component_panels.append(self.log_panel)
         self._component_panels.append(self.status_panel)
 
+        notebook.AddPage(self.status_panel, 'Status')
         notebook.AddPage(self.settings_panel, 'Settings')
         notebook.AddPage(self.log_panel, 'Log')
-        notebook.AddPage(self.status_panel, 'Status')
 
         top_panel_sizer = wx.BoxSizer()
         top_panel_sizer.Add(notebook, proportion=1, flag=wx.EXPAND)

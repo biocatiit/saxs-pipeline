@@ -226,7 +226,8 @@ class StatusPanel(wx.Panel):
 
     def update_pipeline_settings(self):
         if self.main_frame.pipeline_cmd_q is not None:
-            self.main_frame.pipeline_cmd_q.append(['update_analysis_args', [], {}])
+            self.main_frame.pipeline_cmd_q.append(['update_pipeline_settings',
+                [], {kw : self.settings[kw] for kw in self.settings}])
 
     def _on_dd_select(self, evt):
         self._on_select_dir('data')

@@ -125,13 +125,13 @@ class monitor_and_load(threading.Thread):
         self._stop_event = threading.Event()
 
         self.raw_settings = raw_settings
-        self.pipeline_settings = pipeline_settings
+        self.pl_settings = pipeline_settings
 
         self._monitor_cmd_q = collections.deque()
         self._monitor_ret_q = collections.deque()
         self._monitor_abort = threading.Event()
         self._monitor_thread = monitor_thread(self._monitor_cmd_q,
-            self._monitor_ret_q, self._monitor_abort, self.pipeline_settings,
+            self._monitor_ret_q, self._monitor_abort, self.pl_settings,
             self._log_lock, self._log_queue)
         self._monitor_thread.start()
 
@@ -381,7 +381,7 @@ class monitor_thread(threading.Thread):
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
-        self.pipeline_settings = pipeline_settings
+        self.pl_settings = pipeline_settings
         self.fprefix = ''
 
         self._exp_id = None
@@ -471,7 +471,7 @@ class monitor_thread(threading.Thread):
                 new_images = []
                 self._abort()
 
-            if (os.path.splitext(f)[1] in self.pipeline_settings['image_exts']
+            if (os.path.splitext(f)[1] in self.pl_settings['image_exts']
                 and os.path.split(f)[1].startswith(self.fprefix)):
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
@@ -531,7 +531,6 @@ class raver_process(mp.Process):
             'set_data_dir_and_fprefix'  : self._set_data_dir_and_fprefix,
             'set_experiment'    : self._set_experiment,
             'load_settings'     : self._load_settings,
-            'update_pipeline_settings': self._update_pipeline_settings,
             }
 
         self.ret_every = 10
@@ -728,14 +727,6 @@ class raver_process(mp.Process):
         self.raw_settings = raw.load_settings(settings_file)
 
         self.m_cmd_q.append(['set_raw_settings', [self.raw_settings]])
-
-    def _update_pipeline_settings(self, *args, **kwargs):
-        logger.debug('Updating pipeline settings: %s',
-            ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
-
-        for key in kwargs:
-            if key in self.pl_settings:
-                self.pl_settings[key] = kwargs[key]
 
     def _log(self, level, msg):
         with self._log_lock:

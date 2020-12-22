@@ -102,6 +102,7 @@ class SettingsPanel(wx.Panel):
             dlg.Destroy()
 
         self.set_values()
+        self._update()
 
     def _on_save(self, evt):
         self._apply()
@@ -127,6 +128,9 @@ class SettingsPanel(wx.Panel):
 
     def _apply(self):
         self.get_values()
+        self._update()
+
+    def _update(self):
         self.main_frame.status_panel.update_pipeline_settings()
 
     def on_exit(self):
