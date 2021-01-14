@@ -110,6 +110,7 @@ class SettingsPanel(wx.Panel):
         fname = self.main_frame.create_file_dialog(wx.FD_SAVE)
 
         if fname is not None:
+            fname = os.path.splitext(fname)[0]+'.pcfg'
             success = settings.save_settings(self.settings, fname,
                 backup_path=self.main_frame.standard_paths.GetUserLocalDataDir())
 
@@ -202,17 +203,25 @@ class SettingsSubPanel(scrolled.ScrolledPanel):
 
                         grid_sizer.Add(label, (row, 0),
                             flag=wx.ALIGN_CENTER_VERTICAL)
-                        grid_sizer.Add(ctrl, (row, 1),
-                            flag=wx.ALIGN_CENTER_VERTICAL)
+
 
                         if key == 'raw_settings_file':
                             select_btn = wx.Button(box, label='Select')
                             select_btn.Bind(wx.EVT_BUTTON, self._on_choose_raw)
 
+                            grid_sizer.Add(ctrl, (row, 1),
+                                flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+
                             grid_sizer.Add(select_btn, (row, 2),
                                 flag=wx.ALIGN_CENTER_VERTICAL)
 
+                        else:
+                            grid_sizer.Add(ctrl, (row, 1),
+                                flag=wx.ALIGN_CENTER_VERTICAL)
+
                     row += 1
+
+            grid_sizer.AddGrowableCol(1)
 
             sizer.Add(grid_sizer, flag=wx.EXPAND)
             top_sizer.Add(sizer, border=self._FromDIP(5), flag=wx.ALL|wx.EXPAND)

@@ -199,7 +199,7 @@ class PipelineFrame(wx.Frame):
         self.pipeline_ret_q = collections.deque()
         self.pipeline_abort_event = threading.Event()
 
-        self.pipeline_thread = pipeline.pipeline.pipeline_thread(self.pipeline_cmd_q,
+        self.pipeline_thread = pipeline.control.pipeline_thread(self.pipeline_cmd_q,
             self.pipeline_ret_q, self.pipeline_abort_event, self.settings)
 
         self.pipeline_thread.start()
@@ -291,7 +291,7 @@ class MyApp(wx.App):
 
         title = 'SAXS Pipeline'
 
-        server_ip = '192.168.1.14'
+        server_ip = '164.54.204.31'
         server_port = '5556'
 
         if len(sys.argv) == 2:
@@ -353,13 +353,13 @@ def main():
     app.MainLoop()
 
 if __name__ == '__main__':
-    mp.set_start_method('spawn')
+    # mp.set_start_method('spawn')
 
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.INFO)
     # formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     formatter = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)

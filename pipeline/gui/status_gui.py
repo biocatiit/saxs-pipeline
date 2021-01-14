@@ -65,7 +65,7 @@ class StatusPanel(wx.Panel):
         ctrl_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, 'Pipeline Control')
         ctrl_box = ctrl_sizer.GetStaticBox()
 
-        status_lbl = wx.StaticText(ctrl_box, label='Pipline Status:')
+        status_lbl = wx.StaticText(ctrl_box, label='Pipeline Status:')
         self.pipeline_status = wx.StaticText(ctrl_box, label='Not Started')
 
         self.start_btn = wx.Button(ctrl_box, label='Start')

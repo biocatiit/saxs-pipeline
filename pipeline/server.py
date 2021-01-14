@@ -39,7 +39,7 @@ if __name__ != '__main__':
 import zmq
 import wx
 
-from . import pipeline
+from . import control
 from . import settings
 
 
@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
     raw_settings_file = 'SAXS.cfg'
 
-    pl_thread = pipeline.pipeline_thread(cmd_q, ret_q, abort_event,
+    pl_thread = control.pipeline_thread(cmd_q, ret_q, abort_event,
         pl_settings, raw_settings_file)
 
     pl_thread.start()

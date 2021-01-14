@@ -188,6 +188,7 @@ class monitor_and_load(threading.Thread):
 
                     if time.time() - initial_t > self.header_timeout:
                         new_failed.append(item)
+                        logger.info('Failed to load image')
                     else:
                         imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
 
@@ -227,7 +228,7 @@ class monitor_and_load(threading.Thread):
 
                     exp_id = img_data[0]
                     data_dir = img_data[1]
-                    imgs = img_data[2]
+                    loaded_imgs = img_data[2]
 
                     if exp_id is None:
                         exp_id = self._exp_id
@@ -235,7 +236,7 @@ class monitor_and_load(threading.Thread):
                     if data_dir is None:
                         data_dir = self.data_dir
 
-                    for img in imgs:
+                    for img in loaded_imgs:
                         if self._abort_event.is_set():
                             break
 
@@ -306,7 +307,6 @@ class monitor_and_load(threading.Thread):
         self.ret_every = int(size)
 
     def _load_image_and_counter(self, img_name):
-        self._log('debug', 'Loading image {}'.format(img_name))
 
         file_size = -1
         while file_size != os.path.getsize(img_name):
@@ -315,11 +315,11 @@ class monitor_and_load(threading.Thread):
         try:
             imgs, img_hdrs, counters, fnames, failed = load_images_and_counters([img_name,],
                 self.raw_settings)
-        except SASExceptions.HeaderLoadError:
-            imgs = img_hdrs = counters = fnames = failed = []
 
-        if len(failed) > 0:
-            self._log('error', 'Failed to load image {}'.format(img_name))
+            self._log('debug', 'Loaded image {}'.format(img_name))
+
+        except SASExceptions.HeaderLoadError:
+            imgs = img_hdrs = counters = fnames = []
 
         return imgs, fnames, img_hdrs, counters
 
@@ -439,7 +439,7 @@ class monitor_thread(threading.Thread):
 
         self.data_dir = data_dir
 
-        self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
+        self.dir_snapshot = []
 
     def _set_fprefix(self, fprefix):
         self._log('debug', 'Setting file prefix: {}'.format(fprefix))
@@ -458,15 +458,19 @@ class monitor_thread(threading.Thread):
 
     def _check_for_new_files(self):
 
-        new_snapshot = dirsnapshot.DirectorySnapshot(self.data_dir, False)
+        new_files = []
 
-        diff = dirsnapshot.DirectorySnapshotDiff(self.dir_snapshot, new_snapshot)
-
-        self.dir_snapshot = new_snapshot
+        with os.scandir(self.data_dir) as files:
+            for f in files:
+                if f.is_file():
+                    f_path = f.path
+                    if f_path not in self.dir_snapshot:
+                        new_files.append(f_path)
+                        self.dir_snapshot.append(f_path)
 
         new_images = []
 
-        for f in diff.files_created:
+        for f in new_files:
             if self._abort_event.is_set():
                 new_images = []
                 self._abort()
@@ -476,7 +480,7 @@ class monitor_thread(threading.Thread):
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
         if new_images:
-            logger.debug('New images found: {}'.format(', '.join(new_images)))
+            logger.info('New images found: {}'.format(', '.join(new_images)))
 
         return new_images
 
@@ -484,7 +488,8 @@ class monitor_thread(threading.Thread):
         self._cmd_q.clear()
         self._ret_q.clear()
 
-        self.dir_snapshot = dirsnapshot.DirectorySnapshot(self.data_dir, False)
+        # self.dir_snapshot = dirsnapshot.DirectorySnapshot(self.data_dir, False)
+        self.dir_snapshot = [f.path for f in os.scandir(self.data_dir) if f.is_file()]
 
         self._abort_event.clear()
 

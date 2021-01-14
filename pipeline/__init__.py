@@ -23,6 +23,6 @@ from . import reports
 from . import settings
 from . import reduction
 from . import analysis
-from . import pipeline
+from . import control
 from . import server
 from . import client

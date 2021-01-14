@@ -1105,36 +1105,39 @@ class analysis_process(multiprocessing.Process):
         report_type = args[4]
         report_dir = args[5]
 
-        series, sub_profile = self._make_and_subtract_series(profiles, out_dir,
-            save_processed)
-
-        with self._ret_lock:
-            self._ret_q.put_nowait(['sub_series', exp_id, series, sub_profile])
-
-        if sub_profile is not None and not self._abort_event.is_set():
-            results = self._proc_data([sub_profile], [], out_dir,
-                save_processed, **kwargs)
+        if len(profiles) > 0:
+            series, sub_profile = self._make_and_subtract_series(profiles, out_dir,
+                save_processed)
 
             with self._ret_lock:
-                self._ret_q.put_nowait(['analysis_results', exp_id, results])
+                self._ret_q.put_nowait(['sub_series', exp_id, series, sub_profile])
 
-            profile = results['profile']
-            ift = results['ift']
-            dammif_data = results['dammif_data']
-            denss_data = results['denss_data']
+            if sub_profile is not None and not self._abort_event.is_set():
+                results = self._proc_data([sub_profile], [], out_dir,
+                    save_processed, **kwargs)
 
+                with self._ret_lock:
+                    self._ret_q.put_nowait(['analysis_results', exp_id, results])
+
+                profile = results['profile']
+                ift = results['ift']
+                dammif_data = results['dammif_data']
+                denss_data = results['denss_data']
+
+            else:
+                profile = sub_profile
+                ift = None
+                denss_data = None
+                dammif_data = None
+
+                with self._ret_lock:
+                    self._ret_q.put_nowait(['analysis_results', exp_id, None])
+
+            if save_report:
+                self._make_report(profile, ift, dammif_data, denss_data, report_dir,
+                    series, report_type)
         else:
-            profile = sub_profile
-            ift = None
-            denss_data = None
-            dammif_data = None
-
-            with self._ret_lock:
-                self._ret_q.put_nowait(['analysis_results', exp_id, None])
-
-        if save_report:
-            self._make_report(profile, ift, dammif_data, denss_data, report_dir,
-                series, report_type)
+            self._log('info', 'No profiles to analyze')
 
 
     def _make_and_subtract_series(self, profiles, out_dir, save_processed):
