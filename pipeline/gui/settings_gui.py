@@ -108,11 +108,13 @@ class SettingsPanel(wx.Panel):
         self._apply()
 
         fname = self.main_frame.create_file_dialog(wx.FD_SAVE)
+        backup_path = self.main_frame.standard_paths.GetUserLocalDataDir()
+        backup_path = backup_path.replace('main_gui', 'pipeline')
 
         if fname is not None:
             fname = os.path.splitext(fname)[0]+'.pcfg'
             success = settings.save_settings(self.settings, fname,
-                backup_path=self.main_frame.standard_paths.GetUserLocalDataDir())
+                backup_path=backup_path)
 
         else:
             success = True

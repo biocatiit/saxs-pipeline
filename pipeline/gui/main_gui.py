@@ -20,6 +20,7 @@
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+import logging.handlers as handlers
 import signal
 import sys
 import os
@@ -62,8 +63,10 @@ class PipelineFrame(wx.Frame):
 
         self.standard_paths = wx.StandardPaths.Get()
 
-        if not os.path.exists(self.standard_paths.GetUserLocalDataDir()):
-            os.mkdir(self.standard_paths.GetUserLocalDataDir())
+        self.local_data_dir = self.standard_paths.GetUserLocalDataDir().replace('main_gui', 'pipeline')
+
+        if not os.path.exists(self.local_data_dir):
+            os.mkdir(self.local_data_dir)
 
         self._component_panels = []
 
@@ -139,9 +142,7 @@ class PipelineFrame(wx.Frame):
 
     def _on_startup(self):
 
-        last_settings_dir = self.standard_paths.GetUserLocalDataDir()
-
-        settings_file = os.path.join(last_settings_dir, 'backup.pcfg')
+        settings_file = os.path.join(self.local_data_dir, 'backup.pcfg')
 
         if os.path.exists(settings_file):
             dlg = wx.MessageDialog(parent=self,
@@ -270,19 +271,19 @@ class MyApp(wx.App):
     def OnInit(self):
         """Initializes the app. Calls the :class:`MainFrame`"""
 
-        # standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
-        # info_dir = standard_paths.GetUserLocalDataDir()
+        standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
+        info_dir = standard_paths.GetUserLocalDataDir().replace('main_gui', 'pipeline')
 
-        # if not os.path.exists(info_dir):
-        #     os.mkdir(info_dir)
+        if not os.path.exists(info_dir):
+            os.mkdir(info_dir)
 
-        # h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
-        # # h2.setLevel(logging.INFO)
-        # h2.setLevel(logging.DEBUG)
-        # formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
-        # h2.setFormatter(formatter2)
+        h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
+        # h2.setLevel(logging.INFO)
+        h2.setLevel(logging.DEBUG)
+        formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+        h2.setFormatter(formatter2)
 
-        # logger.addHandler(h2)
+        logger.addHandler(h2)
 
         # sys.excepthook = self.ExceptionHook
 
@@ -291,7 +292,7 @@ class MyApp(wx.App):
 
         title = 'SAXS Pipeline'
 
-        server_ip = '164.54.204.31'
+        server_ip = '164.54.204.82'
         server_port = '5556'
 
         if len(sys.argv) == 2:

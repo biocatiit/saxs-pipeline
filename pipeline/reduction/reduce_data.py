@@ -31,7 +31,7 @@ import traceback
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
-import watchdog.utils.dirsnapshot as dirsnapshot
+# import watchdog.utils.dirsnapshot as dirsnapshot
 
 import bioxtasraw.RAWAPI as raw
 import bioxtasraw.SASExceptions as SASExceptions
@@ -394,7 +394,8 @@ class monitor_thread(threading.Thread):
             }
 
     def run(self):
-        self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
+        # self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
+        self.dir_snapshot = []
 
         while True:
             try:
