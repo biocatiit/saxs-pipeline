@@ -388,7 +388,7 @@ class pipeline_thread(threading.Thread):
         logger.debug('Stopping experiment %s', exp_name)
 
         if exp_name in self.experiments:
-            self.experiments[exp_name].collection_finished = True
+            self.experiments[exp_name].stop_experiment()
 
     def _save_profiles(self, profile_data):
         logger.debug('Saving profiles')
@@ -719,6 +719,13 @@ class Experiment(object):
             if time.time() - self.analysis_last_modified > timeout:
                 logger.error('Experiment %s analysis timed out', self.exp_name)
                 self.analysis_finished = True
+
+    def stop_experiment(self):
+        if self.exp_last_modified > 0:
+            self.collection_finished = True
+
+        else:
+            self.exp_last_modified = time.time()
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')

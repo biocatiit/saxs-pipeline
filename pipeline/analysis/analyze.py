@@ -1138,6 +1138,8 @@ class analysis_process(multiprocessing.Process):
                     series, report_type)
         else:
             self._log('info', 'No profiles to analyze')
+            with self._ret_lock:
+                    self._ret_q.put_nowait(['analysis_results', exp_id, None])
 
 
     def _make_and_subtract_series(self, profiles, out_dir, save_processed):

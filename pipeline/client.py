@@ -79,9 +79,13 @@ class ControlClient(threading.Thread):
 
         while True:
             try:
-                if time.time() - self.last_ping > self.heartbeat:
-                    self.last_ping = time.time()
-                    self._ping()
+                if not self.socket.closed:
+                    if time.time() - self.last_ping > self.heartbeat:
+                        self.last_ping = time.time()
+                        self._ping()
+                else:
+                    if self.socket.closed:
+                        self._ping()
 
                 if len(self.command_queue) > 0:
                     # logger.debug("Getting new command")
@@ -100,9 +104,6 @@ class ControlClient(threading.Thread):
 
                 if command is not None:
                     # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()]))
-
-                    if self.socket.closed:
-                        self._ping()
 
                     if not self.socket.closed:
                         self._send_cmd(command)
