@@ -66,7 +66,7 @@ def load_images_and_counters(filenames, settings):
     failed = []
 
     for fname in filenames:
-        imgs, img_hdrs = raw.load_images(filenames, settings)
+        imgs, img_hdrs = raw.load_images([fname,], settings)
 
         if all(map(lambda img: img is not None, imgs)):
             img_list.extend(imgs)
@@ -394,7 +394,6 @@ class monitor_thread(threading.Thread):
             }
 
     def run(self):
-        # self.dir_snapshot = dirsnapshot.EmptyDirectorySnapshot()
         self.dir_snapshot = []
 
         while True:
@@ -489,7 +488,6 @@ class monitor_thread(threading.Thread):
         self._cmd_q.clear()
         self._ret_q.clear()
 
-        # self.dir_snapshot = dirsnapshot.DirectorySnapshot(self.data_dir, False)
         self.dir_snapshot = [f.path for f in os.scandir(self.data_dir) if f.is_file()]
 
         self._abort_event.clear()
