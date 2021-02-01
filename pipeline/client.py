@@ -167,6 +167,8 @@ class ControlClient(threading.Thread):
             if not self.timeout_event.set():
                 self.answer_queue.append(None)
 
+            self.missed_cmds.append(command)
+
         except Exception:
             cmd = command['command']
             msg = ("Pipeline failed to run command '%s' with args: %s "
