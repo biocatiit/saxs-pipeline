@@ -28,6 +28,7 @@ import multiprocessing as mp
 import traceback
 import collections
 import threading
+import platform
 
 import wx
 
@@ -199,9 +200,11 @@ class PipelineFrame(wx.Frame):
         self.pipeline_cmd_q = collections.deque()
         self.pipeline_ret_q = collections.deque()
         self.pipeline_abort_event = threading.Event()
+        self.pipeline_ret_lock = threading.RLock()
 
         self.pipeline_thread = pipeline.control.pipeline_thread(self.pipeline_cmd_q,
-            self.pipeline_ret_q, self.pipeline_abort_event, self.settings)
+            self.pipeline_ret_q, self.pipeline_abort_event, self.settings,
+            self.pipeline_ret_lock)
 
         self.pipeline_thread.start()
 
@@ -292,7 +295,8 @@ class MyApp(wx.App):
 
         title = 'SAXS Pipeline'
 
-        server_ip = '164.54.204.82'
+        # server_ip = '164.54.204.82'
+        server_ip = '192.168.1.14'
         server_port = '5556'
 
         if len(sys.argv) == 2:
@@ -354,7 +358,8 @@ def main():
     app.MainLoop()
 
 if __name__ == '__main__':
-    # mp.set_start_method('spawn')
+    if platform.system() == 'Darwin':
+        mp.set_start_method('spawn')
 
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)

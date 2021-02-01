@@ -280,6 +280,8 @@ class StatusPanel(wx.Panel):
         pt = self.main_frame.pipeline_thread
 
         if pt is not None:
+            pl = self.main_frame.pipeline_ret_lock
+            pl.acquire()
             data_dir = pt.data_dir
             output_dir = pt.output_dir
             profiles_dir = pt.profiles_dir
@@ -289,9 +291,10 @@ class StatusPanel(wx.Panel):
             num_aproc = str(len(pt.analysis_processes))
             images_loaded = str(pt.get_num_loaded())
             images_averaged = str(pt.get_num_averaged())
-            current_exps = str(len(pt.experiments))
+            current_exps = str(pt.exp_total)
             exp_being_processed = str(pt.exp_being_processed)
             processed_exps = str(pt.exp_processed)
+            pl.release()
 
             if data_dir != self.data_dir:
                 self.data_dir_ctrl.SetValue(data_dir)

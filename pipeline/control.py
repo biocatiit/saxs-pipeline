@@ -44,7 +44,7 @@ from pipeline.reduction import reduce_data
 
 class pipeline_thread(threading.Thread):
 
-    def __init__(self, cmd_q, ret_q, abort_event, pipeline_settings):
+    def __init__(self, cmd_q, ret_q, abort_event, pipeline_settings, ret_lock=threading.RLock()):
         threading.Thread.__init__(self)
         self.daemon = True
         self.name = 'pipeline_ctrl_thread'
@@ -53,9 +53,11 @@ class pipeline_thread(threading.Thread):
 
         self._cmd_q = cmd_q
         self._ret_q = ret_q
+        self._ret_lock = ret_lock
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
+        self._ret_lock.acquire()
         self.data_dir = None
         self.output_dir = None
         self.profiles_dir = None
@@ -63,6 +65,7 @@ class pipeline_thread(threading.Thread):
 
         self.fprefix = ''
 
+        self.exp_total = 0
         self.exp_processed  = 0
         self.exp_being_processed = 0
 
@@ -141,6 +144,8 @@ class pipeline_thread(threading.Thread):
 
         self.save_thread.start()
 
+        self._ret_lock.release()
+
 
 
     def run(self):
@@ -202,6 +207,7 @@ class pipeline_thread(threading.Thread):
         logger.info("Quitting pipeline control thread")
 
     def _start_reduction_process(self):
+        self._ret_lock.acquire()
         logger.debug('Starting reduction process %i', len(self.reduction_processes)+1)
 
         managed_internal_q = self.manager.Queue()
@@ -215,8 +221,10 @@ class pipeline_thread(threading.Thread):
         proc.start()
 
         self.reduction_processes.append(proc)
+        self._ret_lock.release()
 
     def _start_analysis_process(self):
+        self._ret_lock.acquire()
         logger.debug('Starting analysis process %i', len(self.analysis_processes)+1)
 
         proc = analyze.analysis_process(self.a_cmd_q, self.a_ret_q,
@@ -226,11 +234,14 @@ class pipeline_thread(threading.Thread):
         proc.start()
 
         self.analysis_processes.append(proc)
+        self._ret_lock.release()
 
     def _set_data_dir(self, data_dir):
         logger.debug('Setting data directory: %s', data_dir)
 
+        self._ret_lock.acquire()
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
+        self._ret_lock.release()
 
         if self.pl_settings['use_default_output_dir']:
             output_dir = os.path.join(data_dir,
@@ -243,7 +254,9 @@ class pipeline_thread(threading.Thread):
     def _set_fprefix(self, fprefix):
         logger.debug('Setting file prefix: %s' %fprefix)
 
+        self._ret_lock.acquire()
         self.fprefix = fprefix
+        self._ret_lock.release()
 
         self.r_cmd_q.put_nowait(['set_fprefix', [self.fprefix], {}])
 
@@ -251,8 +264,10 @@ class pipeline_thread(threading.Thread):
         logger.debug('Setting data directory and file prefix: %s, %s', data_dir,
             fprefix)
 
+        self._ret_lock.acquire()
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
         self.fprefix = fprefix
+        self._ret_lock.release()
 
         if self.pl_settings['use_default_output_dir']:
             output_dir = os.path.join(data_dir,
@@ -266,7 +281,9 @@ class pipeline_thread(threading.Thread):
     def _set_output_dir(self, output_dir):
         logger.debug('Setting output directory: %s', output_dir)
 
+        self._ret_lock.acquire()
         self.output_dir = os.path.abspath(os.path.expanduser(output_dir))
+        self._ret_lock.release()
 
         if not os.path.exists(self.output_dir):
             os.mkdir(self.output_dir)
@@ -289,7 +306,9 @@ class pipeline_thread(threading.Thread):
     def _set_profiles_dir(self, profiles_dir):
         logger.debug('Setting profiles output directory: %s', profiles_dir)
 
+        self._ret_lock.acquire()
         self.profiles_dir = os.path.abspath(os.path.expanduser(profiles_dir))
+        self._ret_lock.release()
 
         if self.current_experiment in self.experiments:
             self.experiments[self.current_experiment].profiles_dir = profiles_dir
@@ -300,7 +319,9 @@ class pipeline_thread(threading.Thread):
     def _set_analysis_dir(self, analysis_dir):
         logger.debug('Setting analysis output directory: %s', analysis_dir)
 
+        self._ret_lock.acquire()
         self.analysis_dir = os.path.abspath(os.path.expanduser(analysis_dir))
+        self._ret_lock.release()
 
         if self.current_experiment in self.experiments:
             self.experiments[self.current_experiment].analysis_dir = analysis_dir
@@ -315,11 +336,14 @@ class pipeline_thread(threading.Thread):
 
         self.s_cmd_q.append(['set_raw_settings', [self.raw_settings]])
 
+        self._ret_lock.acquire()
         for proc in self.reduction_processes:
             proc.load_settings(raw_settings_file)
 
         for proc in self.analysis_processes:
             proc.load_settings(raw_settings_file)
+
+        self._ret_lock.release()
 
     def _start_experiment(self, *args, **kwargs):
         logger.debug('Starting experiment with args: %s and kwargs: %s',
@@ -337,13 +361,19 @@ class pipeline_thread(threading.Thread):
 
             self.experiments[exp_name] = new_exp
 
+            self._ret_lock.acquire()
+            self.exp_total += 1
+            self._ret_lock.release()
+
         else:
             self.experiments[exp_name].current_fprefix = fprefix
 
         self.current_experiment = exp_name
 
+        self._ret_lock.acquire()
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
         self.fprefix = fprefix
+        self._ret_lock.release()
 
         if self.pl_settings['use_default_output_dir']:
             output_dir = os.path.join(data_dir,
@@ -398,7 +428,9 @@ class pipeline_thread(threading.Thread):
 
                 logger.info('Experiment %s data collection finished', exp.exp_name)
 
+                self._ret_lock.acquire()
                 self.exp_being_processed += 1
+                self._ret_lock.release()
 
                 with self.a_cmd_lock:
                     if exp.exp_type == 'SEC':
@@ -453,8 +485,11 @@ class pipeline_thread(threading.Thread):
             if exp.analysis_finished:
                 logger.info('Experiment %s analysis finished', exp.exp_name)
 
+                self._ret_lock.acquire()
                 self.exp_being_processed += -1
                 self.exp_processed += 1
+                self.exp_total += -1
+                self._ret_lock.release()
 
                 self._ret_q.append(exp)
                 del self.experiments[exp.exp_name]
@@ -506,6 +541,8 @@ class pipeline_thread(threading.Thread):
 
         r_aborts = 0
 
+        self._ret_lock.acquire()
+
         while r_aborts < len(self.reduction_processes):
             try:
                 with self.r_ret_lock:
@@ -533,6 +570,8 @@ class pipeline_thread(threading.Thread):
             except queue.Empty:
                 time.sleep(0.1)
 
+        self._ret_lock.release()
+
         self.r_abort_event.clear()
         self.a_abort_event.clear()
 
@@ -548,6 +587,8 @@ class pipeline_thread(threading.Thread):
         self.save_thread.stop()
         self.save_thread.join()
 
+        self._ret_lock.acquire()
+
         for proc in self.analysis_processes:
             proc.stop()
             proc.join()
@@ -555,6 +596,8 @@ class pipeline_thread(threading.Thread):
         for proc in self.reduction_processes:
             proc.stop()
             proc.join()
+
+        self._ret_lock.release()
 
         self.mp_log_thread.stop()
 
