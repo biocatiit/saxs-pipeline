@@ -130,10 +130,6 @@ class monitor_and_load(threading.Thread):
         self._monitor_cmd_q = collections.deque()
         self._monitor_ret_q = collections.deque()
         self._monitor_abort = threading.Event()
-        self._monitor_thread = monitor_thread(self._monitor_cmd_q,
-            self._monitor_ret_q, self._monitor_abort, self.pl_settings,
-            self._log_lock, self._log_queue)
-        self._monitor_thread.start()
 
         self._commands = {'set_data_dir'    : self._set_data_dir,
             'set_fprefix': self._set_fprefix,
@@ -152,6 +148,11 @@ class monitor_and_load(threading.Thread):
         self.data_dir = None
 
     def run(self):
+        self._monitor_thread = monitor_thread(self._monitor_cmd_q,
+            self._monitor_ret_q, self._monitor_abort, self.pl_settings,
+            self._log_lock, self._log_queue)
+        self._monitor_thread.start()
+
         while True:
             try:
                 if self._stop_event.is_set():
@@ -188,7 +189,7 @@ class monitor_and_load(threading.Thread):
 
                     if time.time() - initial_t > self.header_timeout:
                         new_failed.append(item)
-                        logger.info('Failed to load image')
+                        self._log('info', 'Failed to load image')
                     else:
                         imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
 
@@ -430,7 +431,7 @@ class monitor_thread(threading.Thread):
                     time.sleep(0.1)
 
             except Exception:
-                self._log('error', "Error in monitor tjread:\n{}".format(traceback.format_exc()))
+                self._log('error', "Error in monitor thread:\n{}".format(traceback.format_exc()))
 
         self._log('debug', "Quitting pipeline monitor thread")
 
@@ -480,7 +481,7 @@ class monitor_thread(threading.Thread):
                 new_images.append(os.path.abspath(os.path.expanduser(f)))
 
         if new_images:
-            logger.info('New images found: {}'.format(', '.join(new_images)))
+            self._log('info', 'New images found: {}'.format(', '.join(new_images)))
 
         return new_images
 
@@ -626,22 +627,22 @@ class raver_process(mp.Process):
         self._log('debug', "Quiting reduction process")
 
     def _set_data_dir(self, data_dir):
-        logger.debug('Setting data directory: %s', data_dir)
+        self._log('debug', 'Setting data directory: %s' %(data_dir))
 
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
         self.m_cmd_q.append(['set_data_dir', [self.data_dir]])
 
     def _set_fprefix(self, fprefix):
-        logger.debug('Setting file prefix: %s' %fprefix)
+        self._log('debug', 'Setting file prefix: %s' %fprefix)
 
         self.fprefix = fprefix
 
         self.m_cmd_q.append(['set_fprefix', [self.fprefix]])
 
     def _set_data_dir_and_fprefix(self, data_dir, fprefix):
-        logger.debug('Setting data directory and file prefix: %s, %s', data_dir,
-            fprefix)
+        self._log('debug', 'Setting data directory and file prefix: %s, %s' %(data_dir,
+            fprefix))
 
         self.data_dir = os.path.abspath(os.path.expanduser(data_dir))
         self.fprefix = fprefix
@@ -650,7 +651,7 @@ class raver_process(mp.Process):
             self.fprefix]])
 
     def _set_experiment(self, data_dir, fprefix, exp_id):
-        logger.debug('Setting experiment: %s', exp_id)
+        self._log('debug', 'Setting experiment: %s' %(exp_id))
 
         self._exp_id = exp_id
 
