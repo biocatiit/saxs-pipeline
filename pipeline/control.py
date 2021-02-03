@@ -203,6 +203,7 @@ class pipeline_thread(threading.Thread):
 
             except Exception:
                 logger.error('Error in pipeline thread:\n{}'.format(traceback.format_exc()))
+                time.sleep(0.1)
 
         logger.info("Quitting pipeline control thread")
 
@@ -600,6 +601,7 @@ class pipeline_thread(threading.Thread):
         self._ret_lock.release()
 
         self.mp_log_thread.stop()
+        self.mp_log_thread.join()
 
         self._stop_event.set()
 
@@ -634,6 +636,9 @@ class mp_log_thread(threading.Thread):
                     time.sleep(0.1)
             except Exception:
                 logger.error('Error in log thread:\n{}'.format(traceback.format_exc()))
+                time.sleep(0.1)
+
+        logger.info("Quitting pipeline mp log thread")
 
     def stop(self):
         """Stops the thread cleanly."""
