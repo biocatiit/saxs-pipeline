@@ -280,7 +280,8 @@ class MyApp(wx.App):
         if not os.path.exists(info_dir):
             os.mkdir(info_dir)
 
-        h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'pipeline.log'), maxBytes=10e6, backupCount=5, delay=True)
+        h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'pipeline.log'), 
+            maxBytes=10e6, backupCount=100, delay=True)
         # h2.setLevel(logging.INFO)
         h2.setLevel(logging.DEBUG)
         formatter2 = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
@@ -358,8 +359,8 @@ def main():
     app.MainLoop()
 
 if __name__ == '__main__':
-    if platform.system() == 'Darwin':
-        mp.set_start_method('spawn')
+    #if platform.system() == 'Darwin':
+    mp.set_start_method('spawn')
 
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -371,16 +372,26 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
+    # print(logging.root.manager.loggerDict)
+
     try:
-        fabio_logger = logging.getLogger('fabio')
-        fabio_logger.setLevel(logging.CRITICAL)
-        numba_logger = logging.getLogger('numba')
-        numba_logger.setLevel(logging.CRITICAL)
-        reportlab_logger = logging.getLogger('reportlab')
-        reportlab_logger.setLevel(logging.CRITICAL)
-        matplotlib_logger = logging.getLogger('matplotlib')
-        matplotlib_logger.setLevel(logging.CRITICAL)
+        for module_logger in logging.root.manager.loggerDict.keys():
+            print(module_logger)
+            if not module_logger.startswith('pipeline'):
+                logging.getLogger(module_logger).setLevel(60)
+
+            print(logging.getLogger(module_logger))
+        # fabio_logger = logging.getLogger('fabio')
+        # fabio_logger.setLevel(60)
+        # numba_logger = logging.getLogger('numba')
+        # numba_logger.setLevel(60)
+        # reportlab_logger = logging.getLogger('reportlab')
+        # reportlab_logger.setLevel(60)
+        # matplotlib_logger = logging.getLogger('matplotlib')
+        # matplotlib_logger.setLevel(60)
     except Exception:
-        pass
+        traceback.print_exc()
+
+    print(logging.root.manager.loggerDict)
 
     main()
