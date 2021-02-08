@@ -374,6 +374,12 @@ if __name__ == '__main__':
     try:
         fabio_logger = logging.getLogger('fabio')
         fabio_logger.setLevel(logging.CRITICAL)
+        numba_logger = logging.getLogger('numba')
+        numba_logger.setLevel(logging.CRITICAL)
+        reportlab_logger = logging.getLogger('reportlab')
+        reportlab_logger.setLevel(logging.CRITICAL)
+        matplotlib_logger = logging.getLogger('matplotlib')
+        matplotlib_logger.setLevel(logging.CRITICAL)
     except Exception:
         pass
 
