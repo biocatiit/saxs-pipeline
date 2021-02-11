@@ -809,6 +809,8 @@ class save_thread(threading.Thread):
             raw.save_profile(profile, datadir=output_dir,
                 settings=self.raw_settings)
 
+        logger.debug('Finished saving profiles')
+
     def _set_raw_settings(self, settings):
         logger.debug('Setting RAW settings')
         self.raw_settings = settings

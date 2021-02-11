@@ -274,12 +274,13 @@ class StatusPanel(wx.Panel):
             self.main_frame.pipeline_cmd_q.append(['set_fprefix', [fprefix], {}])
 
     def _on_status_timer(self, evt):
-        self._get_status()
+        wx.CallAfter(self._get_status)
 
     def _get_status(self):
         pt = self.main_frame.pipeline_thread
 
         if pt is not None:
+            logger.debug('Updating GUI status from pipeline')
             pl = self.main_frame.pipeline_ret_lock
             pl.acquire()
             data_dir = pt.data_dir
@@ -287,8 +288,8 @@ class StatusPanel(wx.Panel):
             profiles_dir = pt.profiles_dir
             analysis_dir = pt.analysis_dir
             fprefix = pt.fprefix
-            num_rproc = str(len(pt.reduction_processes))
-            num_aproc = str(len(pt.analysis_processes))
+            num_rproc = str(pt.num_reduction_processes)
+            num_aproc = str(pt.num_analysis_processes)
             images_loaded = str(pt.get_num_loaded())
             images_averaged = str(pt.get_num_averaged())
             current_exps = str(pt.exp_total)
@@ -343,6 +344,8 @@ class StatusPanel(wx.Panel):
             if processed_exps != self.processed_exps:
                 self.exp_proc_ctrl.SetLabel(processed_exps)
                 self.processed_exps = processed_exps
+
+            logger.debug('Done updating GUI status from pipeline')
 
     def on_exit(self):
         self._status_timer.Stop()

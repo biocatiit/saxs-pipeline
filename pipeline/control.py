@@ -93,6 +93,9 @@ class pipeline_thread(threading.Thread):
         self.reduction_processes = []
         self.analysis_processes = []
 
+        self.num_reduction_processes = 0
+        self.num_analysis_processes = 0
+
         self.manager = mp.Manager()
 
         #Reduction queues, locks, etc
@@ -222,6 +225,9 @@ class pipeline_thread(threading.Thread):
         proc.start()
 
         self.reduction_processes.append(proc)
+
+        self.num_reduction_processes += 1
+
         self._ret_lock.release()
 
     def _start_analysis_process(self):
@@ -235,6 +241,9 @@ class pipeline_thread(threading.Thread):
         proc.start()
 
         self.analysis_processes.append(proc)
+
+        self.num_analysis_processes += 1
+
         self._ret_lock.release()
 
     def _set_data_dir(self, data_dir):
@@ -250,7 +259,7 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.r_cmd_q.put_nowait(['set_data_dir', [self.data_dir], {}])
+        self.r_cmd_q.put_nowait(['set_data_dir', [copy.deepcopy(self.data_dir)], {}])
 
     def _set_fprefix(self, fprefix):
         logger.debug('Setting file prefix: %s' %fprefix)
@@ -276,8 +285,8 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.r_cmd_q.put_nowait(['set_data_dir_and_fprefix', [self.data_dir,
-            self.fprefix], {}])
+        self.r_cmd_q.put_nowait(['set_data_dir_and_fprefix', [copy.deepcopy(self.data_dir),
+            copy.deepcopy(self.fprefix)], {}])
 
     def _set_output_dir(self, output_dir):
         logger.debug('Setting output directory: %s', output_dir)
@@ -382,8 +391,8 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.r_cmd_q.put_nowait(['set_experiment', [self.data_dir,
-            self.fprefix, self.current_experiment], {}])
+        self.r_cmd_q.put_nowait(['set_experiment', [copy.deepcopy(self.data_dir),
+            copy.deepcopy(self.fprefix), self.current_experiment], {}])
 
     def _stop_experiment(self, exp_name):
         logger.debug('Stopping experiment %s', exp_name)
@@ -404,7 +413,7 @@ class pipeline_thread(threading.Thread):
                 profiles_dir = self.profiles_dir
 
             if profiles_dir is not None:
-                self.s_cmd_q.append(['save_profiles', [profiles_dir, profiles]])
+                self.s_cmd_q.append(['save_profiles', [copy.deepcopy(profiles_dir), profiles]])
 
     def _add_profiles_to_experiment(self, profile_data):
         logger.debug('Adding profiles to experiment')
@@ -415,6 +424,7 @@ class pipeline_thread(threading.Thread):
             self.experiments[exp_id].add_profiles(profiles)
 
     def _check_exp_status(self):
+        logger.debug('Checking experiment status')
 
         save_proc_data = self.pl_settings['save_processed_data']
         save_report = self.pl_settings['save_report']
@@ -475,6 +485,8 @@ class pipeline_thread(threading.Thread):
                 exp.analysis_finished = True
 
     def _check_analysis_status(self):
+        logger.debug('Checking analysis status')
+
         exp_keys = list(self.experiments.keys())
 
         for exp_key in exp_keys:
@@ -523,10 +535,10 @@ class pipeline_thread(threading.Thread):
         self._set_analysis_args()
 
     def get_num_loaded(self):
-        return copy.copy(self.num_loaded.get())
+        return copy.deepcopy(self.num_loaded.get())
 
     def get_num_averaged(self):
-        return copy.copy(self.num_averaged.get())
+        return copy.deepcopy(self.num_averaged.get())
 
     def _abort(self):
         logger.debug('Aborting pipeline')

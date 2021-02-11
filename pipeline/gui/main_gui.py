@@ -197,6 +197,7 @@ class PipelineFrame(wx.Frame):
         return f
 
     def _start_pipeline(self):
+        logger.debug('Starting the pipeline')
         self.pipeline_cmd_q = collections.deque()
         self.pipeline_ret_q = collections.deque()
         self.pipeline_abort_event = threading.Event()
@@ -297,7 +298,7 @@ class MyApp(wx.App):
         title = 'SAXS Pipeline'
 
         server_ip = '164.54.204.82'
-        # server_ip = '192.168.1.14'
+        server_ip = '192.168.1.14'
         server_port = '5556'
 
         if len(sys.argv) == 2:
@@ -333,6 +334,8 @@ class MyApp(wx.App):
         msg = ("An unexpected error has occurred, please report it to the "
                 "developers. You may need to restart RAW to continue working"
                 "\n\nError:\n%s" %(errTxt))
+
+        logger.error('Error in GUI:\n{}'.format(traceback.format_exc()))
 
         if self and self.IsMainLoopRunning():
             if not self.HandleError(value):
