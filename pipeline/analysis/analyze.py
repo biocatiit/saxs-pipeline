@@ -1189,35 +1189,40 @@ class analysis_process(multiprocessing.Process):
         sample_profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
         buffer_profiles.sort(key=lambda prof: int(os.path.splitext(prof.getParameter('filename'))[0].split('_')[-1]))
 
-        if use_sim_test:
-            if sim_test.lower() == 'cormap':
-                _, sample_cor_pvals, failed = raw.cormap(sample_profiles[1:],
-                    sample_profiles[0], sim_corr)
+        if len(sample_profiles) > 0 and len(buffer_profiles) > 0:
+            if use_sim_test:
+                if sim_test.lower() == 'cormap':
+                    _, sample_cor_pvals, failed = raw.cormap(sample_profiles[1:],
+                        sample_profiles[0], sim_corr)
 
-                _, buffer_cor_pvals, failed = raw.cormap(buffer_profiles[1:],
-                    buffer_profiles[0], sim_corr)
+                    _, buffer_cor_pvals, failed = raw.cormap(buffer_profiles[1:],
+                        buffer_profiles[0], sim_corr)
+            else:
+                sample_cor_pvals = [1 for prof in sample_profiles]
+                buffer_cor_pvals = [1 for prof in buffer_profiles]
+
+            sample_reduced_profs = [sample_profiles[0]]
+            for i, prof in enumerate(sample_profiles[1:]):
+                if sample_cor_pvals[i] >= sim_threshold:
+                    sample_reduced_profs.append(prof)
+
+            buffer_reduced_profs = [buffer_profiles[0]]
+            for i, prof in enumerate(buffer_profiles[1:]):
+                if buffer_cor_pvals[i] >= sim_threshold:
+                    buffer_reduced_profs.append(prof)
+
+            try:
+                avg_buffer_prof = raw.average(buffer_reduced_profs)
+            except SASExceptions.DataNotCompatible:
+                avg_buffer_prof = None
+
+            try:
+                avg_sample_prof = raw.average(sample_reduced_profs)
+            except SASExceptions.DataNotCompatible:
+                avg_sample_prof = None
+
         else:
-            sample_cor_pvals = [1 for prof in sample_profiles]
-            buffer_cor_pvals = [1 for prof in buffer_profiles]
-
-        sample_reduced_profs = [sample_profiles[0]]
-        for i, prof in enumerate(sample_profiles[1:]):
-            if sample_cor_pvals[i] >= sim_threshold:
-                sample_reduced_profs.append(prof)
-
-        buffer_reduced_profs = [buffer_profiles[0]]
-        for i, prof in enumerate(buffer_profiles[1:]):
-            if buffer_cor_pvals[i] >= sim_threshold:
-                buffer_reduced_profs.append(prof)
-
-        try:
-            avg_buffer_prof = raw.average(buffer_reduced_profs)
-        except SASExceptions.DataNotCompatible:
             avg_buffer_prof = None
-
-        try:
-            avg_sample_prof = raw.average(sample_reduced_profs)
-        except SASExceptions.DataNotCompatible:
             avg_sample_prof = None
 
         if avg_buffer_prof is not None and avg_sample_prof is not None:
