@@ -392,7 +392,7 @@ class pipeline_thread(threading.Thread):
             self._set_output_dir(output_dir)
 
         self.r_cmd_q.put_nowait(['set_experiment', [copy.deepcopy(self.data_dir),
-            copy.deepcopy(self.fprefix), self.current_experiment], {}])
+            copy.deepcopy(self.fprefix), copy.deepcopy(self.current_experiment)], {}])
 
     def _stop_experiment(self, exp_name):
         logger.debug('Stopping experiment %s', exp_name)
@@ -413,7 +413,8 @@ class pipeline_thread(threading.Thread):
                 profiles_dir = self.profiles_dir
 
             if profiles_dir is not None:
-                self.s_cmd_q.append(['save_profiles', [copy.deepcopy(profiles_dir), profiles]])
+                self.s_cmd_q.append(['save_profiles', [copy.deepcopy(profiles_dir),
+                    copy.deepcopy(profiles)]])
 
     def _add_profiles_to_experiment(self, profile_data):
         logger.debug('Adding profiles to experiment')
@@ -445,17 +446,17 @@ class pipeline_thread(threading.Thread):
 
                 with self.a_cmd_lock:
                     if exp.exp_type == 'SEC':
-                        self.a_cmd_q.put_nowait(['make_and_analyze_series',
+                        self.a_cmd_q.put_nowait(copy.deepcopy(['make_and_analyze_series',
                             exp.exp_name, [exp.analysis_dir, exp.profiles,
                             save_proc_data, save_report, report_type,
-                            exp.output_dir], self._analysis_args])
+                            exp.output_dir], self._analysis_args]))
                         exp.analysis_last_modified = time.time()
 
                     elif exp.exp_type == 'Batch':
-                        self.a_cmd_q.put_nowait(['subtract_and_analyze_batch',
+                        self.a_cmd_q.put_nowait(copy.deepcopy(['subtract_and_analyze_batch',
                             exp.exp_name, [exp.analysis_dir, exp.profiles,
                             exp.buffer_profiles, save_proc_data, save_report,
-                            report_type, exp.output_dir], self._analysis_args])
+                            report_type, exp.output_dir], self._analysis_args]))
                         exp.analysis_last_modified = time.time()
 
     def _add_analysis_to_experiment(self, results):
