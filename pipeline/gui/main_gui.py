@@ -283,12 +283,19 @@ class MyApp(wx.App):
 
         h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'pipeline.log'),
             maxBytes=10e6, backupCount=100, delay=True)
-        # h2.setLevel(logging.INFO)
-        h2.setLevel(logging.DEBUG)
+        h2.setLevel(logging.INFO)
+        # h2.setLevel(logging.DEBUG)
         formatter2 = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
         h2.setFormatter(formatter2)
 
+        h3 = handlers.RotatingFileHandler(os.path.join(info_dir, 'pipeline_debug.log'),
+            maxBytes=10e6, backupCount=100, delay=True)
+        # h3.setLevel(logging.INFO)
+        h3.setLevel(logging.DEBUG)
+        h3.setFormatter(formatter2)
+
         logger.addHandler(h2)
+        logger.addHandler(h3)
 
         # sys.excepthook = self.ExceptionHook
 
