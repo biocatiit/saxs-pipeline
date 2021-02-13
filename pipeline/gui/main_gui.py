@@ -118,19 +118,19 @@ class PipelineFrame(wx.Frame):
 
         notebook = wx.Notebook(top_panel)
 
-        self.log_panel = log_gui.LogPanel(notebook, self.settings, name='LogPanel')
+        # self.log_panel = log_gui.LogPanel(notebook, self.settings, name='LogPanel')
         self.settings_panel = settings_gui.SettingsPanel(notebook, self.settings,
             name='SettingsPanel')
         self.status_panel = status_gui.StatusPanel(notebook, self.settings,
             name='StatusPanel')
 
         self._component_panels.append(self.settings_panel)
-        self._component_panels.append(self.log_panel)
+        # self._component_panels.append(self.log_panel)
         self._component_panels.append(self.status_panel)
 
         notebook.AddPage(self.status_panel, 'Status')
         notebook.AddPage(self.settings_panel, 'Settings')
-        notebook.AddPage(self.log_panel, 'Log')
+        # notebook.AddPage(self.log_panel, 'Log')
 
         top_panel_sizer = wx.BoxSizer()
         top_panel_sizer.Add(notebook, proportion=1, flag=wx.EXPAND)
@@ -231,7 +231,7 @@ class PipelineFrame(wx.Frame):
     def _cleanup_and_quit(self):
         logger.debug('Closing the PipelineFrame')
 
-        logger.removeHandler(self.log_panel.txt_handler)
+        # logger.removeHandler(self.log_panel.txt_handler)
 
         if self.pipeline_server is not None:
             self.pipeline_server.stop()
@@ -384,10 +384,11 @@ if __name__ == '__main__':
 
     try:
         for module_logger in logging.root.manager.loggerDict.keys():
-            if not module_logger.startswith('pipeline'):
+            if not module_logger.startswith('pipeline') and not module_logger.startswith('raw'):
                 logging.getLogger(module_logger).setLevel(60)
 
     except Exception:
         traceback.print_exc()
 
+    print(logging.root.manager.loggerDict)
     main()
