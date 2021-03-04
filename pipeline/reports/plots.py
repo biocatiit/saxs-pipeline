@@ -153,6 +153,8 @@ class overview_plot(object):
 
         lines = []
 
+        ax.axhline(0, 0, 1, linewidth=1.0, color='k')
+
         for series in self.series:
             x_data = series.frames
 
