@@ -38,102 +38,6 @@ import bioxtasraw.SASExceptions as SASExceptions
 from ..reports import data as report_data
 from ..reports import pdf
 
-def find_dmax(profile, settings, use_atsas=True, single_proc=True):
-    analysis_dict = profile.getParameter('analysis')
-    try:
-        rg = float(analysis_dict['guinier']['Rg'])
-    except Exception:
-        rg = -1
-
-    if rg != -1:
-
-        # Get Dmax from DATCLASS
-        try:
-            dc_dmax = float(analysis_dict['molecularWeight']['ShapeAndSize']['Dmax'])
-        except Exception:
-            dc_dmax = -1
-
-        if dc_dmax == -1 and use_atsas:
-            try:
-                dc_mw, dc_shape, dc_dmax = raw.mw_datclass(profile)
-            except Exception:
-                dc_dmax = -1
-
-        if dc_dmax != -1:
-            dmax = int(round(dc_dmax))
-
-        else:
-            #Calculate the IFT using BIFT
-            try:
-                bift_dmax = float(analysis_dict['BIFT']['Dmax'])
-            except Exception:
-                bift_dmax = -1
-
-            if bift_dmax == -1:
-                try:
-                    (bift, bift_dmax, bift_rg, bift_i0, bift_dmax_err,
-                    bift_rg_err, bift_i0_err, bift_chi_sq, bift_log_alpha,
-                    bift_log_alpha_err, bift_evidence,
-                    bift_evidence_err) = raw.bift(profile, settings=settings,
-                    single_proc=single_proc)
-                except Exception:
-                    bift_dmax = -1
-
-            #Calculate the IFT using DATGNOM
-            if use_atsas:
-                try:
-                    (datgnom_ift, datgnom_dmax, datgnom_rg, datgnom_i0,
-                    datgnom_rg_err, datgnom_i0_err, datgnom_total_est,
-                    datgnom_chi_sq, datgnom_alpha, datgnom_quality) = raw.datgnom(profile)
-                except Exception:
-                    datgnom_dmax = -1
-            else:
-                datgnom_dmax = -1
-
-            if bift_dmax != -1 and datgnom_dmax != -1:
-                dmax = np.mean([bift_dmax, datgnom_dmax])
-
-            elif bift_dmax != -1:
-                dmax = bift_dmax*0.79
-
-            elif datgnom_dmax != -1:
-                dmax = datgnom_dmax*1.2
-
-            else:
-                dmax = -1
-
-            if dmax != -1:
-                dmax = round(dmax)
-
-        if dmax != -1 and use_atsas:
-            # Refine if Dmax is too long
-            ift_results = raw.gnom(profile, dmax)
-            ift = ift_results[0]
-            dmax_start = dmax
-
-            while dmax > dmax_start*0.5 and np.any(ift.p[-20:] < 0):
-                dmax = dmax -1
-                ift_results = raw.gnom(profile, dmax)
-                ift = ift_results[0]
-
-            if dmax_start == dmax:
-                #Refine if Dmax is too short
-                ift_results = raw.gnom(profile, dmax, dmax_zero=False)
-                ift_unforced = ift_results[0]
-                dmax_start = dmax
-
-                while dmax < dmax_start*1.5 and ift_unforced.p[-1]>0.01*ift_unforced.p.max():
-                    dmax = dmax +1
-                    ift_results = raw.gnom(profile, dmax, dmax_zero=False)
-                    ift_unforced = ift_results[0]
-
-    else:
-        dmax = -1
-
-    dmax = int(round(dmax))
-
-    return dmax
-
 def calc_mw(profile, settings, use_atsas=True):
     if 'Conc' in profile.getAllParameters():
         try:
@@ -715,7 +619,8 @@ def model_free_analysis(profile, settings, use_atsas=True, single_proc=True,
         if abort_event.is_set():
             return profile, None
 
-        dmax = find_dmax(profile, settings, use_atsas, single_proc)
+        dmax = raw.find_dmax(profile, settings=settings, use_atsas=use_atsas,
+            single_proc=single_proc)
 
         if abort_event.is_set():
             return profile, None
