@@ -636,6 +636,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
     elements = [series_table]
 
+    #EFA
     efa_elements = []
 
     efa_table_pairs = [
@@ -739,6 +740,115 @@ def generate_series_params(profiles, ifts, series, extra_data):
             efa_elements.append(efa_figure)
 
     elements.extend(efa_elements)
+
+    #REGALS
+    # regals_elements = []
+
+    # regals_table_pairs = [
+    #     ('', 'name'),
+    #     ('REGALS data range', 'regals_range'),
+    #     ('Number of components', 'nsvs'),
+    #     ('Convergence criteria', 'conv_crit'),
+    #     ('Max iterations', 'max_iter'),
+    #     ('Min iterations', 'min_iter'),
+    #     ('Tolerance', 'tol'),
+    #     ]
+
+    # regals_table_dict = OrderedDict()
+
+    # regals_table_data = []
+
+    # regals_required_data = ['', 'REGALS data range', 'Number of components']
+
+    # for j, s in enumerate(series):
+    #     if s.regals_done:
+    #         if len(series) > 1:
+    #             regals_title = Paragraph('{} regals results:'.format(name_list[j]),
+    #                 styles['Heading3'])
+    #         else:
+    #             regals_title = Paragraph('regals results:', styles['Heading3'])
+
+    #         # Make regals table
+    #         for header, key in regals_table_pairs:
+    #             if key == 'name':
+    #                 value = name_list[j]
+    #             elif key == 'regals_range':
+    #                 value = '{} to {}'.format(s.regals_start, s.regals_end)
+    #             elif key == 'nsvs':
+    #                 value = '{}'.format(s.regals_nsvs)
+
+    #             if header in regals_table_dict:
+    #                 regals_table_dict[header].append(value)
+    #             else:
+    #                 regals_table_dict[header] = [value]
+
+    #         for k, regals_range in enumerate(s.regals_ranges):
+    #             header = 'Component {}'.format(k)
+    #             value = '{} to {}'.format(*regals_range)
+
+    #             if header in regals_table_dict:
+    #                 regals_table_dict[header].append(value)
+    #             else:
+    #                 regals_table_dict[header] = [value]
+
+
+    #         for header, values in regals_table_dict.items():
+    #             if header in regals_required_data:
+    #                 regals_table_entry = [header]
+    #                 regals_table_entry.extend(values)
+    #                 regals_table_data.append(regals_table_entry)
+    #             else:
+    #                 if any(val != '' for val in values):
+    #                     regals_table_entry = [header]
+    #                     regals_table_entry.extend(values)
+    #                     regals_table_data.append(regals_table_entry)
+
+    #         regals_table = Table(regals_table_data)
+
+    #         table_style = TableStyle(
+    #             [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+    #             ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+    #             ])
+
+    #         regals_table.setStyle(table_style)
+    #         regals_table.hAlign = 'LEFT'
+    #         # regals_table = KeepTogether([regals_table])
+
+    #         # Make regals plot
+
+    #         regals_plot_panel = plots.regals_plot(s)
+
+    #         img_width = 6
+    #         img_height = 2
+
+    #         regals_caption = ('regals deconvolution results. a) The full series '
+    #             'intensity (blue), the selected intensity range for regals '
+    #             '(black), and (if available) Rg values (red). b) The selected '
+    #             'intensity range for regals (black), and the individual component '
+    #             'ranges for deconvolution, with component range 0 starting at '
+    #             'the top left, and component number increasing in descending '
+    #             'order to the right.')
+
+    #         if s.regals_extra_data:
+    #             regals_caption = regals_caption + (' c) Mean chi^2 values between the '
+    #                 'fit of the regals deconvolution and the original data. d) '
+    #                 'Area normalized concentration profiles for each component. '
+    #                 'Colors match the component range colors in b.')
+
+    #             regals_caption = regals_caption + (' e) Deconvolved scattering '
+    #                 'profiles. Colors match the component range colors in '
+    #                 'b and the concentration range colors in d.')
+
+    #             img_height = 6
+
+    #         regals_figure = make_figure(regals_plot_panel.figure, regals_caption, img_width,
+    #             img_height, styles)
+
+    #         regals_elements.append(regals_title)
+    #         regals_elements.append(regals_table)
+    #         regals_elements.append(regals_figure)
+
+    # elements.extend(regals_elements)
 
     return elements
 

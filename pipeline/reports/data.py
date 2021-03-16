@@ -147,6 +147,7 @@ class SECData(object):
 
         self.get_metadata(secm)
         self.get_efa_data(secm)
+        self.get_regals_data(secm)
 
     def get_metadata(self, secm):
         metadata_dict = {}
@@ -241,7 +242,7 @@ class SECData(object):
             self.efa_nsvs = ''
             self.efa_iter_limit = ''
             self.efa_method = ''
-            self.efa_profile = ''
+            self.efa_profile_type = ''
             self.efa_tolerance = ''
             self.efa_frames = []
             self.efa_extra_data = False
@@ -249,7 +250,65 @@ class SECData(object):
             self.efa_conc = []
             self.efa_chi = ''
 
+    def get_regals_data(self, secm):
+        analysis_dict = secm.getParameter('analysis')
 
+        if 'regals' in analysis_dict:
+            regals_dict = analysis_dict['regals']
+
+            self.regals_done = True
+            self.regals_ranges = regals_dict['ranges']
+            self.regals_frame_ranges = regals_dict['frame_ranges']
+            self.regals_start = regals_dict['fstart']
+            self.regals_end = regals_dict['fend']
+            self.regals_nsvs = regals_dict['nsvs']
+            self.regals_component_settings = regals_dict['component_settings']
+            self.regals_run_settings = regals_dict['run_settings']
+            self.regals_background_comps = regals_dict['background_components']
+            self.regals_exp_type = regals_dict['exp_type']
+            self.regals_profile_type = regals_dict['profile']
+
+            if 'x_calibration' in regals_dict:
+                self.regals_x_cal = regals_dict['x_calibration']
+            else:
+                self.regals_x_cal = np.arange(self.regals_start, self.regals_end+1)
+
+            if self.regals_profile_type == 'Subtracted':
+                prof_type = 'sub'
+            elif self.regals_profile_type == 'Unsubtracted':
+                prof_type = 'unsub'
+            elif self.regals_profile_type == 'Basline Corrected':
+                prof_type = 'baseline'
+
+            regals_results = raw.regals(secm, self.regals_component_settings, prof_type,
+                int(self.regals_start), int(self.regals_end), self.regals_x_cal,
+                self.regals_run_settings['min_iter'], self.regals_run_settings['max_iter'],
+                self.regals_run_settings['tol'], self.regals_run_settings['conv_type'])
+
+            self.regals_extra_data = True
+            self.regals_profiles = [SAXSData(prof) for prof in regals_results[0]]
+            self.regals_ifts = [IFTData(ift) for ift in regals_results[1]]
+            self.regals_chi = np.mean(regals_results[4] ** 2, 0)
+            self.regals_conc = regals_results[2].concentrations
+
+        else:
+            self.regals_done = False
+            self.regals_ranges = []
+            self.regals_frame_ranges = []
+            self.regals_start = ''
+            self.regals_end = ''
+            self.regals_nsvs = ''
+            self.regals_component_settings = []
+            self.regals_run_settings = {}
+            self.regals_background_comps = ''
+            self.regals_exp_type = ''
+            self.regals_profile_type = ''
+
+            self.regals_extra_data = False
+            self.regals_profiles = []
+            self.regals_ifts = []
+            self.regals_conc = []
+            self.regals_chi = ''
 
 
 class SAXSData(object):
