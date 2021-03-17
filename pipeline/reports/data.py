@@ -25,7 +25,7 @@ import numpy as np
 
 import bioxtasraw.RAWAPI as raw
 
-from . import utils
+from .utils import text_round as text_round
 
 GuinierData = collections.namedtuple('Guinier', ['Rg', 'I0', 'Rg_err',
     'I0_err', 'n_min', 'n_max', 'q_min', 'q_max', 'qRg_min', 'qRg_max', 'r_sq'],
@@ -190,8 +190,8 @@ class SECData(object):
 
         q_i = first_prof.getQ()[0]
         q_f = first_prof.getQ()[-1]
-        metadata_dict['q_range'] = '{} to {}'.format(utils.text_round(q_i, 4),
-            utils.text_round(q_f, 2))
+        metadata_dict['q_range'] = '{} to {}'.format(text_round(q_i, 4),
+            text_round(q_f, 2))
 
         self.metadata = Metadata(**metadata_dict)
 
@@ -612,8 +612,8 @@ class SAXSData(object):
 
         q_i = self.q[0]
         q_f = self.q[-1]
-        metadata_dict['q_range'] = '{} to {}'.format(utils.text_round(q_i, 4),
-            utils.text_round(q_f, 2))
+        metadata_dict['q_range'] = '{} to {}'.format(text_round(q_i, 4),
+            text_round(q_f, 2))
 
         self.metadata = Metadata(**metadata_dict)
 

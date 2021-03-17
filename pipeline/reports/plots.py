@@ -59,8 +59,11 @@ class overview_plot(object):
 
         if len(profiles) > 0:
             has_profiles = True
+
+            has_rg = any([prof.guinier_data.Rg > 0 and prof.guinier_data.I0 > 0 for prof in profiles])
         else:
             has_profiles = False
+            has_rg = False
 
         if len(ifts) > 0:
             has_ifts = True
@@ -74,7 +77,7 @@ class overview_plot(object):
 
         self.figure = plt.figure(figsize=(img_width, img_height))
 
-        if has_profiles and has_ifts and has_series:
+        if has_profiles and has_rg and has_ifts and has_series:
             self.gs = self.figure.add_gridspec(3, 2)
 
             self._make_series_plot('a')
@@ -86,7 +89,7 @@ class overview_plot(object):
             self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
                 bottom=0.07, top=0.98, hspace=0.3)
 
-        elif has_profiles and has_ifts and not has_series:
+        elif has_profiles and has_rg and has_ifts and not has_series:
             self.gs = self.figure.add_gridspec(2, 2)
 
             self._make_profile_plot('a', row=0)
@@ -97,7 +100,7 @@ class overview_plot(object):
             self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
                 bottom=0.09, top=0.96, hspace=0.3)
 
-        elif has_profiles and not has_ifts and has_series:
+        elif has_profiles and has_rg and not has_ifts and has_series:
             self.gs = self.figure.add_gridspec(3, 2)
 
             self._make_series_plot('a')
@@ -108,7 +111,7 @@ class overview_plot(object):
             self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
                 bottom=0.07, top=0.98, hspace=0.3)
 
-        elif has_profiles and not has_ifts and not has_series:
+        elif has_profiles and has_rg and not has_ifts and not has_series:
             self.gs = self.figure.add_gridspec(2, 2)
 
             self._make_profile_plot('a', row=0, span=True)
@@ -117,6 +120,42 @@ class overview_plot(object):
 
             self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
                 bottom=0.10, top=0.97, hspace=0.3)
+
+        elif has_profiles and not has_rg and has_ifts and has_series:
+            self.gs = self.figure.add_gridspec(2, 2)
+
+            self._make_series_plot('a')
+            self._make_profile_plot('b')
+            self._make_ift_plot('e', row=1, column=1)
+
+            self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
+                bottom=0.09, top=0.98, hspace=0.3)
+
+        elif has_profiles and not has_rg and has_ifts and not has_series:
+            self.gs = self.figure.add_gridspec(1, 2)
+
+            self._make_profile_plot('a', row=0)
+            self._make_ift_plot('b', row=0, column=1)
+
+            self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
+                bottom=0.18, top=0.96, hspace=0.3)
+
+        elif has_profiles and not has_rg and not has_ifts and has_series:
+            self.gs = self.figure.add_gridspec(2, 2)
+
+            self._make_series_plot('a')
+            self._make_profile_plot('b', row=1, span=True)
+
+            self.figure.subplots_adjust(left=0.1, right=0.90, wspace=0.3,
+                bottom=0.09, top=0.98, hspace=0.3)
+
+        elif has_profiles and not has_rg and not has_ifts and not has_series:
+            self.gs = self.figure.add_gridspec(1, 2)
+
+            self._make_profile_plot('', row=0, span=True)
+
+            self.figure.subplots_adjust(left=0.1, right=0.97, wspace=0.3,
+                bottom=0.17, top=0.98, hspace=0.3)
 
         elif not has_profiles and has_ifts and has_series:
             self.gs = self.figure.add_gridspec(2, 2)
@@ -283,19 +322,20 @@ class overview_plot(object):
 
 
         for profile in self.profiles:
-            fit = guinier_fit(profile.q, profile.guinier_data.Rg,
-                profile.guinier_data.I0)
-            n_min = profile.guinier_data.n_min
-            n_max = profile.guinier_data.n_max
+            if profile.guinier_data.Rg > 0 and profile.guinier_data.I0 > 0:
+                fit = guinier_fit(profile.q, profile.guinier_data.Rg,
+                    profile.guinier_data.I0)
+                n_min = profile.guinier_data.n_min
+                n_max = profile.guinier_data.n_max
 
-            ax.plot(profile.q[:n_max+1]**2, profile.i[:n_max+1], 'o', markersize=3,
-                label=profile.filename)
-            ax.plot(profile.q[n_min:n_max+1]**2, fit[n_min:n_max+1], '-', color='k')
-            if n_min > 0:
-                ax.plot(profile.q[:n_min]**2, fit[:n_min], '--', color='0.6')
+                ax.plot(profile.q[:n_max+1]**2, profile.i[:n_max+1], 'o', markersize=3,
+                    label=profile.filename)
+                ax.plot(profile.q[n_min:n_max+1]**2, fit[n_min:n_max+1], '-', color='k')
+                if n_min > 0:
+                    ax.plot(profile.q[:n_min]**2, fit[:n_min], '--', color='0.6')
 
-            res_y = (profile.i[n_min:n_max+1]-fit[n_min:n_max+1])/profile.err[n_min:n_max+1]
-            res_ax.plot(profile.q[n_min:n_max+1]**2, res_y, 'o', markersize=3)
+                res_y = (profile.i[n_min:n_max+1]-fit[n_min:n_max+1])/profile.err[n_min:n_max+1]
+                res_ax.plot(profile.q[n_min:n_max+1]**2, res_y, 'o', markersize=3)
 
         res_ax.axhline(0, color='0')
 
@@ -321,21 +361,24 @@ class overview_plot(object):
         ax.axvline(np.sqrt(3), 0, 1, linestyle = 'dashed', color='0.6')
         ax.axhline(3/np.e, 0, 1, linestyle = 'dashed', color='0.6')
 
-        tail_norm_i_max = 0
+        norm_i_max = 0
 
         for profile in self.profiles:
             i0 = profile.guinier_data.I0
             rg = profile.guinier_data.Rg
 
-            qRg = profile.q*rg
-            norm_i = qRg**2*profile.i/i0
+            if i0 > 0 and rg > 0:
+                qRg = profile.q*rg
+                norm_i = qRg**2*profile.i/i0
 
-            ax.plot(qRg, norm_i, markersize=1,
-                label=profile.filename)
+                ax.plot(qRg, norm_i, markersize=1, label=profile.filename)
 
-            if len(norm_i) > 51:
-                smoothed_data = scipy.signal.savgol_filter(norm_i, 51, 5)
-                tail_norm_i_max = max(tail_norm_i_max, smoothed_data.max())
+                if len(norm_i) > 51:
+                    smoothed_data = scipy.signal.savgol_filter(norm_i, 51, 5)
+                    norm_i_max = max(norm_i_max, smoothed_data.max())
+
+                else:
+                    norm_i_max = min(norm_i_max, norm_i.max())
 
         ax.axhline(0, color='k')
 
@@ -345,7 +388,7 @@ class overview_plot(object):
         ax.set_xlabel(r'q$R_g$')
         ax.set_ylabel(r'(q$R_g$)$^2$I(q)/I(0)')
 
-        top_lim = max(3, tail_norm_i_max*1.1)
+        top_lim = norm_i_max*1.1
 
         ymin, ymax = ax.get_ylim()
         ax.set_ylim(max(-0.1, ymin), min(top_lim, ymax))

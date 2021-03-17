@@ -33,8 +33,11 @@ from reportlab.platypus import (SimpleDocTemplate, Paragraph, Table, Image,
 import bioxtasraw.RAWAPI as raw
 
 from . import plots
+from .plots import overview_plot as overview_plot
+from .plots import efa_plot as efa_plot
 from .utils import text_round as text_round
 from . import data
+from .data import SECData as SECData
 
 temp_files = []
 
@@ -143,8 +146,12 @@ def generate_overview(profiles, ifts, series):
 
     ov_text = Paragraph('Summary:', styles['Heading2'])
 
-    summary_text = ('Data name(s): {}\n'
-        'Collection date(s): {}'.format(name_str, date_str))
+    if any([date != 'N/A' for date in date_list]):
+        summary_text = ('Data name(s): {}\n'
+            'Collection date(s): {}'.format(name_str, date_str))
+    else:
+         summary_text = ('Data name(s): {}\n'.format(name_str))
+
     ov_summary = XPreformatted(summary_text, styles['Normal'])
 
     elements.append(ov_title)
@@ -155,8 +162,10 @@ def generate_overview(profiles, ifts, series):
     # Make overview figure
     if len(profiles) > 0:
         has_profiles = True
+        has_rg = any([prof.guinier_data.Rg > 0 and prof.guinier_data.I0 > 0 for prof in profiles])
     else:
         has_profiles = False
+        has_rg = False
 
     if len(ifts) > 0:
         has_ifts = True
@@ -191,30 +200,53 @@ def generate_overview(profiles, ifts, series):
 
     img_width = 6
 
-    if has_profiles and has_ifts and has_series:
+    if has_profiles and has_rg and has_ifts and has_series:
         img_height = 6
 
         caption = ('{} a) {} b) {} c) {} d) {} e) {}'.format(caption,
             series_label, profile_label, guinier_label, kratky_label,
             ift_label))
 
-    elif has_profiles and has_ifts and not has_series:
+    elif has_profiles and has_rg and has_ifts and not has_series:
         img_height = 4
 
         caption = ('{} a) {} b) {} c) {} d) {}'.format(caption, profile_label,
             guinier_label, kratky_label, ift_label))
 
-    elif has_profiles and not has_ifts and has_series:
+    elif has_profiles and has_rg and not has_ifts and has_series:
         img_height = 6
 
         caption = ('{} a) {} b) {} c) {} d) {}'.format(caption, series_label,
             profile_label, guinier_label, kratky_label))
 
-    elif has_profiles and not has_ifts and not has_series:
+    elif has_profiles and has_rg and not has_ifts and not has_series:
         img_height = 4
 
         caption = ('{} a) {} b) {} c) {}'.format(caption, profile_label,
             guinier_label, kratky_label))
+
+    elif has_profiles and not has_rg and has_ifts and has_series:
+        img_height = 4
+
+        caption = ('{} a) {} b) {} c) {}'.format(caption,
+            series_label, profile_label, ift_label))
+
+    elif has_profiles and not has_rg and has_ifts and not has_series:
+        img_height = 2
+
+        caption = ('{} a) {} b) {}'.format(caption, profile_label,
+            ift_label))
+
+    elif has_profiles and not has_rg and not has_ifts and has_series:
+        img_height = 4
+
+        caption = ('{} a) {} b) {}'.format(caption, series_label,
+            profile_label))
+
+    elif has_profiles and not has_rg and not has_ifts and not has_series:
+        img_height = 2
+
+        caption = ('{} {}'.format(caption, profile_label))
 
     elif not has_profiles and has_ifts and has_series:
         img_height = 4
@@ -235,7 +267,7 @@ def generate_overview(profiles, ifts, series):
         img_height = 0
 
     if img_height > 0:
-        ov_plot = plots.overview_plot(profiles, ifts, series,
+        ov_plot = overview_plot(profiles, ifts, series,
             img_width=img_width, img_height=img_height)
 
         ov_figure = make_figure(ov_plot.figure, caption, img_width, img_height,
@@ -267,7 +299,7 @@ def generate_overview(profiles, ifts, series):
 
     table_data = []
 
-    required_data = ['', 'Guinier Rg', 'Guinier I(0)', 'M.W. (Vp)', 'M.W. (Vc)']
+    required_data = ['']
 
 
     for profile in profiles:
@@ -393,7 +425,7 @@ def generate_overview(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    if len(table_data) > 0:
+    if len(table_data) > 1:
         ov_table = Table(table_data, spaceBefore=0.25*inch, spaceAfter=0.1*inch)
 
         table_style = TableStyle(
@@ -431,7 +463,7 @@ def generate_exp_params(profiles, ifts, series):
         data_list = []
 
     for s in data_list:
-        if isinstance(s, data.SECData):
+        if isinstance(s, SECData):
             if ('File_prefix' in s.metadata._fields
             and getattr(s.metadata, 'File_prefix') != ''):
                 name_list.append(getattr(s.metadata, 'File_prefix'))
@@ -470,8 +502,7 @@ def generate_exp_params(profiles, ifts, series):
 
     table_data = []
 
-    required_data = ['', 'Date', 'Wavelength (A)', 'Camera length (m)',
-        'Exposure time (s)']
+    required_data = ['']
 
     for j, s in enumerate(data_list):
         for header, key in table_pairs:
@@ -531,7 +562,7 @@ def generate_exp_params(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    if len(table_data) > 0:
+    if len(table_data) > 1:
         exp_table = Table(table_data)
 
         table_style = TableStyle(
@@ -580,7 +611,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
     table_data = []
 
-    required_data = ['', 'Buffer range', 'Sample range', 'Baseline correction',]
+    required_data = []
 
 
     for j, s in enumerate(series):
@@ -592,7 +623,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
             baseline_start = '{} to {}'.format(*s.baseline_start_range)
             baseline_end = '{} to {}'.format(*s.baseline_end_range)
         else:
-            baseline_type = 'None'
+            baseline_type = ''
             baseline_start = ''
             baseline_end = ''
 
@@ -626,18 +657,21 @@ def generate_series_params(profiles, ifts, series, extra_data):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    series_table = Table(table_data)
+    if len(table_data) > 1:
+        series_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    series_table.setStyle(table_style)
-    series_table.hAlign = 'LEFT'
-    series_table = KeepTogether([series_text, series_table])
+        series_table.setStyle(table_style)
+        series_table.hAlign = 'LEFT'
+        series_table = KeepTogether([series_text, series_table])
 
-    elements = [series_table]
+        elements = [series_table]
+    else:
+        elements = [series_text]
 
     #EFA
     efa_elements = []
@@ -712,7 +746,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
             # Make EFA plot
 
-            efa_plot_panel = plots.efa_plot(s)
+            efa_plot_panel = efa_plot(s)
 
             img_width = 6
             img_height = 2
@@ -827,15 +861,6 @@ def generate_series_params(profiles, ifts, series, extra_data):
                 else:
                     regals_table_dict[header] = [value]
 
-            # for k, regals_range in enumerate(s.regals_ranges):
-            #     header = 'Component {}'.format(k)
-            #     value = '{} to {}'.format(*regals_range)
-
-            #     if header in regals_table_dict:
-            #         regals_table_dict[header].append(value)
-            #     else:
-            #         regals_table_dict[header] = [value]
-
             for header, values in regals_table_dict.items():
                 if header in regals_comp_required_data:
                     regals_table_entry = [header]
@@ -919,7 +944,7 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
             # Make REGALS plot
 
-            regals_plot_panel = plots.efa_plot(s, is_regals=True)
+            regals_plot_panel = efa_plot(s, is_regals=True)
 
             img_width = 6
             img_height = 6
@@ -953,6 +978,9 @@ def generate_series_params(profiles, ifts, series, extra_data):
 
     elements.extend(regals_elements)
 
+    if len(elements) == 1:
+        elements = []
+
     return elements
 
 def generate_guinier_params(profiles, ifts, series):
@@ -980,8 +1008,7 @@ def generate_guinier_params(profiles, ifts, series):
 
     table_data = []
 
-    required_data = ['', 'Rg [A]', 'I(0)', 'q-range [1/A]', 'qmin*Rg', 'qmax*Rg',
-        'r^2']
+    required_data = ['']
 
 
     for profile in profiles:
@@ -1048,18 +1075,24 @@ def generate_guinier_params(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    guinier_table = Table(table_data)
+    if len(table_data) > 1:
+        guinier_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    guinier_table.setStyle(table_style)
-    guinier_table.hAlign = 'LEFT'
-    guinier_table = KeepTogether([guinier_text, guinier_table])
+        guinier_table.setStyle(table_style)
+        guinier_table.hAlign = 'LEFT'
+        guinier_table = KeepTogether([guinier_text, guinier_table])
 
-    return [guinier_table]
+        elements = [guinier_table]
+
+    else:
+        elements = []
+
+    return elements
 
 def generate_mw_params(profiles, ifts, series):
     styles = getSampleStyleSheet()
@@ -1086,7 +1119,7 @@ def generate_mw_params(profiles, ifts, series):
 
     table_data = []
 
-    required_data = ['', 'M.W. (Vp)', 'M.W. (Vc)']
+    required_data = ['']
 
 
     for profile in profiles:
@@ -1189,18 +1222,24 @@ def generate_mw_params(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    mw_table = Table(table_data)
+    if len(table_data) > 1:
+        mw_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    mw_table.setStyle(table_style)
-    mw_table.hAlign = 'LEFT'
-    mw_table = KeepTogether([mw_text, mw_table])
+        mw_table.setStyle(table_style)
+        mw_table.hAlign = 'LEFT'
+        mw_table = KeepTogether([mw_text, mw_table])
 
-    return [mw_table]
+        elements = [mw_table]
+
+    else:
+        elements = []
+
+    return elements
 
 def generate_gnom_params(profiles, ifts, series):
     styles = getSampleStyleSheet()
@@ -1225,7 +1264,7 @@ def generate_gnom_params(profiles, ifts, series):
 
     table_data = []
 
-    required_data = ['', 'Dmax [A]', 'Rg [A]', 'I(0)']
+    required_data = ['']
 
 
     for ift in ifts:
@@ -1304,18 +1343,24 @@ def generate_gnom_params(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    gnom_table = Table(table_data)
+    if len(table_data) > 1:
+        gnom_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    gnom_table.setStyle(table_style)
-    gnom_table.hAlign = 'LEFT'
-    gnom_table = KeepTogether([gnom_text, gnom_table])
+        gnom_table.setStyle(table_style)
+        gnom_table.hAlign = 'LEFT'
+        gnom_table = KeepTogether([gnom_text, gnom_table])
 
-    return [gnom_table]
+        elements = [gnom_table]
+
+    else:
+        elements = []
+
+    return elements
 
 def generate_bift_params(profiles, ifts, series):
     styles = getSampleStyleSheet()
@@ -1335,7 +1380,7 @@ def generate_bift_params(profiles, ifts, series):
 
     table_data = []
 
-    required_data = ['', 'Dmax [A]', 'Rg [A]', 'I(0)']
+    required_data = ['']
 
 
     for ift in ifts:
@@ -1394,18 +1439,24 @@ def generate_bift_params(profiles, ifts, series):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    bift_table = Table(table_data)
+    if len(table_data) > 1:
+        bift_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    bift_table.setStyle(table_style)
-    bift_table.hAlign = 'LEFT'
-    bift_table = KeepTogether([bift_text, bift_table])
+        bift_table.setStyle(table_style)
+        bift_table.hAlign = 'LEFT'
+        bift_table = KeepTogether([bift_text, bift_table])
 
-    return [bift_table]
+        elements = [bift_table]
+
+    else:
+        elements = []
+
+    return elements
 
 def generate_dammif_params(dammif_data):
     styles = getSampleStyleSheet()
@@ -1433,9 +1484,7 @@ def generate_dammif_params(dammif_data):
 
     table_data = []
 
-    required_data = ['', 'Program', 'Mode', 'Symmetry', 'Anisometry',
-        'Number of reconstructions', 'Ran DAMAVER', 'Ran DAMCLUST',
-        'Refined with DAMMIN']
+    required_data = ['']
 
 
     for info in dammif_data:
@@ -1474,18 +1523,24 @@ def generate_dammif_params(dammif_data):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    dammif_table = Table(table_data)
+    if len(table_data) > 1:
+        dammif_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    dammif_table.setStyle(table_style)
-    dammif_table.hAlign = 'LEFT'
-    dammif_table = KeepTogether([dammif_text, dammif_table])
+        dammif_table.setStyle(table_style)
+        dammif_table.hAlign = 'LEFT'
+        dammif_table = KeepTogether([dammif_text, dammif_table])
 
-    return [dammif_table]
+        elements = [dammif_table]
+
+    else:
+        elements = []
+
+    return elements
 
 def generate_denss_params(denss_data):
     styles = getSampleStyleSheet()
@@ -1510,8 +1565,7 @@ def generate_denss_params(denss_data):
 
     table_data = []
 
-    required_data = ['', 'Mode', 'Symmetry', 'Number of reconstructions',
-        'Averaged', 'Refined']
+    required_data = ['']
 
 
     for info in denss_data:
@@ -1549,18 +1603,24 @@ def generate_denss_params(denss_data):
                 table_entry.extend(values)
                 table_data.append(table_entry)
 
-    denss_table = Table(table_data)
+    if len(table_data) > 1:
+        denss_table = Table(table_data)
 
-    table_style = TableStyle(
-        [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
-        ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
-        ])
+        table_style = TableStyle(
+            [('LINEBELOW', (0, 0), (-1, 0), 1, colors.black),
+            ('LINEAFTER', (0, 0), (0,-1), 1, colors.black),
+            ])
 
-    denss_table.setStyle(table_style)
-    denss_table.hAlign = 'LEFT'
-    denss_table = KeepTogether([denss_text, denss_table])
+        denss_table.setStyle(table_style)
+        denss_table.hAlign = 'LEFT'
+        denss_table = KeepTogether([denss_text, denss_table])
 
-    return [denss_table]
+        elements = [denss_table]
+
+    else:
+        elements = []
+
+    return elements
 
 def make_figure(figure, caption, img_width, img_height, styles):
     """

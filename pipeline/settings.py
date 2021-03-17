@@ -58,7 +58,7 @@ class Settings(object):
             'save_report'               : [True, 'bool', 'Analysis', 'Save report'], #Save a report on the analysis
             'report_type'               : ['pdf', 'choice', 'Analysis', ('Report type:', ['pdf'])], #Report type, right now only pdf is allowed
             'denss'                     : [True, 'bool', 'Analysis', 'Run DENSS'], #Do DENSS reconstructions
-            'denss_runs'                : [3, 'int', 'Analysis', 'Number of DENSS models:'], #Number of DENSS models
+            'denss_runs'                : [4, 'int', 'Analysis', 'Number of DENSS models:'], #Number of DENSS models
             'denss_mode'                : ['Fast', 'choice', 'Analysis', ('DENSS mode:', ['Fast', 'Slow', 'Membrane'])], #DENSS mode
             'denss_aver'                : [True, 'bool', 'Analysis', 'Run DENSS average'], #Average denss models
             'denss_refine'              : [False, 'bool', 'Analysis', 'Run DENSS refinement'], #Refine denss models

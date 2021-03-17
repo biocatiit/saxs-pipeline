@@ -378,7 +378,7 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     #Average the electron reconstructions
     rsc_data = []
 
-    if average and nruns > 1:
+    if average and nruns > 3:
         if single_proc:
             n_proc=1
         else:
@@ -413,7 +413,7 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
 
     model_data = []
 
-    if average and nruns > 1:
+    if average and nruns > 3:
         for i, score in enumerate(scores):
             model_data.append([i+1, round(chi_vals[i], 5), round(rg_vals[i], 2),
                 round(support_vol_vals[i], 2), round(score, 4)])
@@ -423,7 +423,7 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
                 round(support_vol_vals[i], 2), ''])
 
     #Refine the electron density
-    do_refine = refine and average and nruns > 1
+    do_refine = refine and average and nruns > 3
 
     if do_refine:
         (refined_rho, refined_chi_sq, refined_rg, refined_support_vol,
@@ -619,7 +619,7 @@ def model_free_analysis(profile, settings, use_atsas=True, single_proc=True,
         if abort_event.is_set():
             return profile, None
 
-        dmax = raw.find_dmax(profile, settings=settings, use_atsas=use_atsas,
+        dmax = raw.auto_dmax(profile, settings=settings, use_atsas=use_atsas,
             single_proc=single_proc)
 
         if abort_event.is_set():
