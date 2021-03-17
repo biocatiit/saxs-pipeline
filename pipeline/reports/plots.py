@@ -385,15 +385,17 @@ class efa_plot(object):
     """
 
     def __init__(self, series, int_type='Total',
-        series_data='Rg', img_width=6, img_height=6):
+        series_data='Rg', img_width=6, img_height=6, is_regals=False):
 
         self.series = series
 
         self.int_type = int_type
         self.series_data = series_data
 
+        self.is_regals = is_regals
 
-        if not series.efa_extra_data:
+
+        if not series.efa_extra_data and not self.is_regals:
             if img_width == 6 and img_height == 6:
                 self.figure = plt.figure(figsize=(6, 2))
             else:
@@ -408,12 +410,12 @@ class efa_plot(object):
         self._make_series_plot()
         self._make_efa_range_plot()
 
-        if series.efa_extra_data:
+        if series.efa_extra_data or self.is_regals:
             self._make_efa_chi_plot()
             self._make_efa_concentration_plot()
             self._make_efa_profiles_plot()
 
-        if series.efa_extra_data:
+        if series.efa_extra_data or self.is_regals:
 
             self.figure.subplots_adjust(left=0.1, right=0.98, wspace=0.3,
                 bottom=0.07, top=0.98, hspace=0.3)
@@ -428,8 +430,6 @@ class efa_plot(object):
         ax.spines["right"].set_visible(False)
         make_patch_spines_invisible(ax2)
         ax2.spines["right"].set_visible(True)
-
-        x_data = self.series.frames
 
         if self.int_type == 'Total':
             y_data = self.series.total_i
@@ -446,8 +446,14 @@ class efa_plot(object):
             elif self.series_data == 'MW_Vp':
                 y2_data = self.series.vpmw
 
-        start = int(self.series.efa_start)
-        end = int(self.series.efa_end)
+        if not self.is_regals:
+            start = int(self.series.efa_start)
+            end = int(self.series.efa_end)
+            x_data = self.series.frames
+        else:
+            start = int(self.series.regals_start)
+            end = int(self.series.regals_end)
+            x_data = self.series.regals_x_cal
 
         int_line, = ax.plot(x_data, y_data, '-', label=self.series.filename)
         ax.plot(x_data[start:end+1], y_data[start:end+1], '-', color='k')
@@ -472,7 +478,14 @@ class efa_plot(object):
         ax2.tick_params(axis='y', colors=calc_color)
         ax2.spines['right'].set_color(calc_color)
 
-        ax.set_xlabel('Frames')
+        if not self.is_regals:
+            ax.set_xlabel('Frames')
+        else:
+            if np.array_equal(x_data, np.arange(int(self.series.regals_start),
+                int(self.series.regals_end)+1)):
+                ax.set_xlabel('Frames')
+            else:
+                ax.set_xlabel(self.series.regals_x_type)
 
         ax.set_ylabel('{} Intensity [Arb.]'.format(self.int_type))
 
@@ -489,11 +502,16 @@ class efa_plot(object):
             size='large')
 
     def _make_efa_range_plot(self, row=0, column=1):
-        start = int(self.series.efa_start)
-        end = int(self.series.efa_end)
-        ranges = self.series.efa_ranges
-
-        frame_data = self.series.frames
+        if not self.is_regals:
+            start = int(self.series.efa_start)
+            end = int(self.series.efa_end)
+            ranges = self.series.efa_ranges
+            frame_data = self.series.frames
+        else:
+            start = int(self.series.regals_start)
+            end = int(self.series.regals_end)
+            ranges = self.series.regals_ranges
+            frame_data = self.series.regals_x_cal
 
         if self.int_type == 'Total':
             int_data = self.series.total_i
@@ -519,44 +537,81 @@ class efa_plot(object):
             ax.axvline(ranges[i][1], 0, 0.975-0.05*(i), linestyle='dashed',
                 color=color)
 
-        ax.set_xlabel('Frames')
+        if not self.is_regals:
+            ax.set_xlabel('Frames')
+        else:
+            if np.array_equal(frame_data, np.arange(int(self.series.regals_start),
+                int(self.series.regals_end)+1)):
+                ax.set_xlabel('Frames')
+            else:
+                ax.set_xlabel(self.series.regals_x_type)
         ax.set_ylabel('{} Intensity [Arb.]'.format(self.int_type))
 
         ax.text(-0.15, 1.0, 'b', transform = ax.transAxes, fontweight='bold',
             size='large')
 
     def _make_efa_chi_plot(self, row=1, column=0):
-        frames = self.series.efa_frames
-        chi = self.series.efa_chi
+        if not self.is_regals:
+            frames = self.series.efa_frames
+            chi = self.series.efa_chi
+        else:
+            frames = self.series.regals_x_cal
+            chi = self.series.regals_chi
 
         ax = self.figure.add_subplot(self.gs[row, column])
         ax.plot(frames, chi, '-', color='k')
 
-        ax.set_xlabel('Frames')
+        if not self.is_regals:
+            ax.set_xlabel('Frames')
+        else:
+            if np.array_equal(frames, np.arange(int(self.series.regals_start),
+                int(self.series.regals_end)+1)):
+                ax.set_xlabel('Frames')
+            else:
+                ax.set_xlabel(self.series.regals_x_type)
         ax.set_ylabel(r'Mean $\chi^2$')
 
         ax.text(-0.15, 1.0, 'c', transform = ax.transAxes, fontweight='bold',
             size='large')
 
     def _make_efa_concentration_plot(self, row=1, column=1):
-        frames = self.series.efa_frames
-        conc = self.series.efa_conc
+        if not self.is_regals:
+            frames = self.series.efa_frames
+            conc = self.series.efa_conc
+        else:
+            frames = self.series.regals_x_cal
+            conc = self.series.regals_conc
 
         ax = self.figure.add_subplot(self.gs[row, column])
 
         for i in range(conc.shape[1]):
             ax.plot(frames, conc[:, i], '-')
 
-        ax.set_xlabel('Frames')
+        if not self.is_regals:
+            ax.set_xlabel('Frames')
+        else:
+            if np.array_equal(frames, np.arange(int(self.series.regals_start),
+                int(self.series.regals_end)+1)):
+                ax.set_xlabel('Frames')
+            else:
+                ax.set_xlabel(self.series.regals_x_type)
         ax.set_ylabel('Norm. Concentration')
 
         ax.text(-0.15, 1.0, 'd', transform = ax.transAxes, fontweight='bold',
             size='large')
 
     def _make_efa_profiles_plot(self, row=2):
-        profiles = self.series.efa_profiles
+        if not self.is_regals:
+            profiles = self.series.efa_profiles
+        else:
+            profiles = self.series.regals_profiles
 
-        ax = self.figure.add_subplot(self.gs[row, :])
+        if self.is_regals and len(self.series.regals_ifts) > 0:
+            ax = self.figure.add_subplot(self.gs[row, 0])
+            span = False
+        else:
+            ax = self.figure.add_subplot(self.gs[row, :])
+            span = True
 
         ax.set_yscale('log')
 
@@ -566,7 +621,25 @@ class efa_plot(object):
         ax.set_xlabel(r'q [$\AA^{-1}$]')
         ax.set_ylabel('Intensity [Arb.]')
 
-        ax.text(-0.05, 1.0, 'e', transform = ax.transAxes, fontweight='bold',
+        if span:
+            offset = -0.05
+        else:
+            offset = -0.15
+
+        ax.text(offset, 1.0, 'e', transform = ax.transAxes, fontweight='bold',
+            size='large')
+
+        if self.is_regals and len(self.series.regals_ifts) > 0:
+            ax2 = self.figure.add_subplot(self.gs[row, 1])
+            ax2.axhline(0, color='k')
+
+            for ift in self.series.regals_ifts:
+                ax2.plot(ift.r, ift.p, markersize=1, label=ift.filename)
+
+            ax2.set_xlabel(r'r [$\AA$]')
+            ax2.set_ylabel('P(r)/I(0)')
+
+            ax2.text(offset, 1.0, 'f', transform = ax2.transAxes, fontweight='bold',
             size='large')
 
 def guinier_fit(q, rg, i0):

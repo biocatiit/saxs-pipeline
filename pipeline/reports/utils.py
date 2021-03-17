@@ -31,7 +31,7 @@ def text_round(value, round_to):
     else:
         high_bound = 1000
 
-    if value < low_bound or value > high_bound:
+    if (value < low_bound and value != 0) or value > high_bound:
             value = str(np.format_float_scientific(value, round_to, trim='0',
             exp_digits=1))
     else:

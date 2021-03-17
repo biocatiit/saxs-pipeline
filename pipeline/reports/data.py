@@ -269,9 +269,11 @@ class SECData(object):
             self.regals_profile_type = regals_dict['profile']
 
             if 'x_calibration' in regals_dict:
-                self.regals_x_cal = regals_dict['x_calibration']
+                self.regals_x_cal = np.array(regals_dict['x_calibration']['x'])
+                self.regals_x_type = regals_dict['x_calibration']['x_choice']
             else:
                 self.regals_x_cal = np.arange(self.regals_start, self.regals_end+1)
+                self.regals_x_type = 'X'
 
             if self.regals_profile_type == 'Subtracted':
                 prof_type = 'sub'
