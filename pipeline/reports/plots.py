@@ -489,14 +489,14 @@ class efa_plot(object):
             elif self.series_data == 'MW_Vp':
                 y2_data = self.series.vpmw
 
+        x_data = self.series.frames
+
         if not self.is_regals:
             start = int(self.series.efa_start)
             end = int(self.series.efa_end)
-            x_data = self.series.frames
         else:
             start = int(self.series.regals_start)
             end = int(self.series.regals_end)
-            x_data = self.series.regals_x_cal
 
         int_line, = ax.plot(x_data, y_data, '-', label=self.series.filename)
         ax.plot(x_data[start:end+1], y_data[start:end+1], '-', color='k')
@@ -549,7 +549,7 @@ class efa_plot(object):
             start = int(self.series.efa_start)
             end = int(self.series.efa_end)
             ranges = self.series.efa_ranges
-            frame_data = self.series.frames
+            frame_data = self.series.frames[start:end+1]
         else:
             start = int(self.series.regals_start)
             end = int(self.series.regals_end)
@@ -557,14 +557,14 @@ class efa_plot(object):
             frame_data = self.series.regals_x_cal
 
         if self.int_type == 'Total':
-            int_data = self.series.total_i
+            int_data = self.series.total_i[start:end+1]
         elif self.int_type == 'Mean':
-            int_data = self.series.mean_i
+            int_data = self.series.mean_i[start:end+1]
 
         ax = self.figure.add_subplot(self.gs[row, column])
         plt.setp(ax.get_yticklabels(), visible=False)
 
-        ax.plot(frame_data[start:end+1], int_data[start:end+1], '-', color='k')
+        ax.plot(frame_data, int_data, '-', color='k')
         ax.set_prop_cycle(None)
 
         for i in range(len(ranges)):

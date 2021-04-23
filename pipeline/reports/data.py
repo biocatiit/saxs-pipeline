@@ -259,8 +259,8 @@ class SECData(object):
             self.regals_done = True
             self.regals_ranges = regals_dict['ranges']
             self.regals_frame_ranges = regals_dict['frame_ranges']
-            self.regals_start = regals_dict['fstart']
-            self.regals_end = regals_dict['fend']
+            self.regals_start = int(regals_dict['fstart'])
+            self.regals_end = int(regals_dict['fend'])
             self.regals_nsvs = regals_dict['nsvs']
             self.regals_component_settings = regals_dict['component_settings']
             self.regals_run_settings = regals_dict['run_settings']
