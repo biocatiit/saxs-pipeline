@@ -105,7 +105,8 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
 
         chi_sq, rg, dmax, mw, ev = raw.dammif(temp_ift,
             '{}_{:02d}'.format(prefix, i+1), dammif_dir, mode=mode,
-            write_ift=write_ift, ift_name=ift_name, abort_event=abort_event)
+            write_ift=write_ift, ift_name=ift_name, abort_event=abort_event,
+            unit='Angstrom')
 
         chi_sq_vals.append(chi_sq)
         rg_vals.append(rg)
@@ -212,7 +213,8 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     if do_refine:
         chi_sq, rg, dmax, mw, ev = raw.dammin(temp_ift, 'refine_{}'.format(prefix),
             dammif_dir, 'Refine', initial_dam='{}_damstart.pdb'.format(prefix),
-            write_ift=False, ift_name=ift_name, abort_event=abort_event)
+            write_ift=False, ift_name=ift_name, abort_event=abort_event,
+            unit='Angstrom')
 
         chi_sq_vals.append(chi_sq)
         rg_vals.append(rg)
@@ -768,11 +770,11 @@ def analyze_files(out_dir, data_dir, profiles, ifts, raw_settings, dammif=True,
     return profiles, all_ifts, all_dammif_data, all_denss_data
 
 
-def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
-    dammif=True, denss=True, dam_runs=3, dam_mode='Fast', damaver=True,
-    damclust=False, dam_refine=False, denss_runs=3, denss_mode='Fast',
-    denss_aver=True, denss_refine=False, use_atsas=True, single_proc=True,
-    abort_event=threading.Event()):
+def analyze_data(out_dir, profiles, ifts, raw_settings, parent_proc,
+    save_processed=False, dammif=True, denss=True, dam_runs=3, dam_mode='Fast',
+    damaver=True, damclust=False, dam_refine=False, denss_runs=3,
+    denss_mode='Fast', denss_aver=True, denss_refine=False, use_atsas=True,
+    single_proc=True, abort_event=threading.Event()):
 
     new_ifts = []
 
@@ -800,37 +802,45 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
             new_ifts.append(ift)
 
             if dammif and use_atsas:
-                ift_results = raw.gnom(copy.deepcopy(profiles[i]),
-                    ift.getParameter('dmax'), cut_dam=True)
-                cut_ift = ift_results[0]
-                fname = cut_ift.getParameter('filename')
-                name, ext = os.path.splitext(fname)
-                fname = '{}_cut{}'.format(name, ext)
-                cut_ift.setParameter('filename', fname)
+                try:
+                    ift_results = raw.gnom(copy.deepcopy(profiles[i]),
+                        ift.getParameter('dmax'), cut_dam=True)
+                    cut_ift = ift_results[0]
+                    fname = cut_ift.getParameter('filename')
+                    name, ext = os.path.splitext(fname)
+                    fname = '{}_cut{}'.format(name, ext)
+                    cut_ift.setParameter('filename', fname)
 
-                dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
-                    out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
-                    damaver=damaver, damclust=damclust,
-                    dam_refine=dam_refine, denss_runs=denss_runs,
-                    denss_aver=denss_aver, denss_refine=denss_refine,
-                    use_atsas=use_atsas, abort_event=abort_event)
+                    dammif_data, _ = model_based_analysis(cut_ift, raw_settings,
+                        out_dir, dammif=dammif, denss=False, dam_runs=dam_runs,
+                        damaver=damaver, damclust=damclust,
+                        dam_refine=dam_refine, denss_runs=denss_runs,
+                        denss_aver=denss_aver, denss_refine=denss_refine,
+                        use_atsas=use_atsas, abort_event=abort_event)
 
-                if dammif_data is not None:
-                    all_dammif_data.append(dammif_data)
+                    if dammif_data is not None:
+                        all_dammif_data.append(dammif_data)
+
+                except Exception:
+                    parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
 
             if abort_event.is_set():
                 break
 
             if denss:
-                _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
-                    dammif=False, denss=denss, dam_runs=dam_runs,
-                    damaver=damaver, damclust=damclust,
-                    dam_refine=dam_refine, denss_runs=denss_runs,
-                    denss_aver=denss_aver, denss_refine=denss_refine,
-                    use_atsas=use_atsas, abort_event=abort_event)
+                try:
+                    _, denss_data = model_based_analysis(ift, raw_settings, out_dir,
+                        dammif=False, denss=denss, dam_runs=dam_runs,
+                        damaver=damaver, damclust=damclust,
+                        dam_refine=dam_refine, denss_runs=denss_runs,
+                        denss_aver=denss_aver, denss_refine=denss_refine,
+                        use_atsas=use_atsas, abort_event=abort_event)
 
-                if denss_data is not None:
-                    all_denss_data.append(denss_data)
+                    if denss_data is not None:
+                        all_denss_data.append(denss_data)
+
+                except Exception:
+                    parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
 
     if abort_event.is_set():
         return profiles, new_ifts, all_dammif_data, all_denss_data
@@ -839,18 +849,22 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, save_processed=False,
         if abort_event.is_set():
             break
 
-        dammif_data, denss_data = model_based_analysis(ift, raw_settings,
-            out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
-            damaver=damaver, damclust=damclust, dam_refine=dam_refine,
-            denss_runs=denss_runs, denss_aver=denss_aver,
-            denss_refine=denss_refine, use_atsas=use_atsas,
-            abort_event=abort_event)
+        try:
+            dammif_data, denss_data = model_based_analysis(ift, raw_settings,
+                out_dir, dammif=dammif, denss=denss, dam_runs=dam_runs,
+                damaver=damaver, damclust=damclust, dam_refine=dam_refine,
+                denss_runs=denss_runs, denss_aver=denss_aver,
+                denss_refine=denss_refine, use_atsas=use_atsas,
+                abort_event=abort_event)
 
-        if dammif_data is not None:
-            all_dammif_data.append(dammif_data)
+            if dammif_data is not None:
+                all_dammif_data.append(dammif_data)
 
-        if denss_data is not None:
-            all_denss_data.append(denss_data)
+            if denss_data is not None:
+                all_denss_data.append(denss_data)
+
+        except Exception:
+            parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
 
     all_ifts = new_ifts + ifts
 
@@ -957,7 +971,7 @@ class analysis_process(multiprocessing.Process):
         kwargs['abort_event'] = self._abort_event
 
         profiles, ifts, dammif_data, denss_data = analyze_data(out_dir,
-            profiles, ifts, self.raw_settings, save_processed, **kwargs)
+            profiles, ifts, self.raw_settings, self, save_processed, **kwargs)
 
         if profiles:
             profile = profiles[0]

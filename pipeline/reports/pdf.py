@@ -29,10 +29,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Table, Image,
     XPreformatted, KeepTogether, TableStyle)
+import matplotlib.pyplot as plt
 
 import bioxtasraw.RAWAPI as raw
 
-from . import plots
 from .plots import overview_plot as overview_plot
 from .plots import efa_plot as efa_plot
 from .utils import text_round as text_round
@@ -1636,7 +1636,8 @@ def make_figure(figure, caption, img_width, img_height, styles):
     temp_files.append(filename) #Note defined at a module level
 
     figure.savefig(filename, dpi=300)
-    image = Image(filename, img_width*inch, img_height*inch)
+    plt.close(figure)
+    image = Image(filename, img_width*inch, img_height*inch, lazy=2)
     image.hAlign = 'CENTER'
 
     text = Paragraph(caption, styles['Normal'])

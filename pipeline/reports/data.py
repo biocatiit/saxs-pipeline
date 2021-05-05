@@ -27,6 +27,7 @@ import bioxtasraw.RAWAPI as raw
 
 from .utils import text_round as text_round
 
+
 GuinierData = collections.namedtuple('Guinier', ['Rg', 'I0', 'Rg_err',
     'I0_err', 'n_min', 'n_max', 'q_min', 'q_max', 'qRg_min', 'qRg_max', 'r_sq'],
     defaults=[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
@@ -290,8 +291,9 @@ class SECData(object):
             self.regals_extra_data = True
             self.regals_profiles = [SAXSData(prof) for prof in regals_results[0]]
             self.regals_ifts = [IFTData(ift) for ift in regals_results[1]]
-            self.regals_chi = np.mean(regals_results[4] ** 2, 0)
-            self.regals_conc = regals_results[2].concentrations
+            self.regals_chi = np.mean(regals_results[6] ** 2, 0)
+            self.regals_conc = regals_results[2]
+            self.regals_reg_conc = regals_results[3]
 
         else:
             self.regals_done = False
@@ -310,6 +312,7 @@ class SECData(object):
             self.regals_profiles = []
             self.regals_ifts = []
             self.regals_conc = []
+            self.regals_reg_conc = []
             self.regals_chi = ''
 
 
