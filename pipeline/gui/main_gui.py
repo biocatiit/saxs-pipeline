@@ -294,7 +294,7 @@ class MyApp(wx.App):
         h3.setLevel(logging.DEBUG)
         h3.setFormatter(formatter2)
 
-        logger.addHandler(h2)
+        # logger.addHandler(h2)
         # logger.addHandler(h3)
 
         # sys.excepthook = self.ExceptionHook
@@ -304,8 +304,8 @@ class MyApp(wx.App):
 
         title = 'SAXS Pipeline'
 
-        server_ip = '164.54.204.82'
-        # server_ip = '192.168.1.14'
+        # server_ip = '164.54.204.82'
+        server_ip = '192.168.1.14'
         server_port = '5556'
 
         if len(sys.argv) == 2:
@@ -375,8 +375,8 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.INFO)
     # formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     formatter = logging.Formatter('%(asctime)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)

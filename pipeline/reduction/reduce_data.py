@@ -489,7 +489,7 @@ class monitor_thread(threading.Thread):
         self._cmd_q.clear()
         self._ret_q.clear()
 
-        if os.path.exists(self.data_dir):
+        if self.data_dir is not None and os.path.exists(self.data_dir):
             self.dir_snapshot = [f.path for f in os.scandir(self.data_dir) if f.is_file()]
         else:
             self.dir_snapshot = []

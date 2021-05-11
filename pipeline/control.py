@@ -123,8 +123,8 @@ class pipeline_thread(threading.Thread):
         self.pl_settings = self.manager.dict()
         self._update_pipeline_settings(**{kw : pipeline_settings[kw] for kw in pipeline_settings})
 
-        self.raw_settings_file = self.pl_settings['raw_settings_file']
-        self.raw_settings = raw.load_settings(self.raw_settings_file)
+        # self.raw_settings_file = self.pl_settings['raw_settings_file']
+        # self.raw_settings = raw.load_settings(self.raw_settings_file)
 
         # For the moment, current architechture doesn't allow more than 1 reduction process
         # Can revist if necessary, will leave everything in place.
@@ -342,9 +342,13 @@ class pipeline_thread(threading.Thread):
     def _load_raw_settings(self, raw_settings_file):
         logger.debug('Loading RAW settings from %s', raw_settings_file)
 
+        self.raw_settings_file = raw_settings_file
         self.raw_settings = raw.load_settings(raw_settings_file)
 
-        self.s_cmd_q.append(['set_raw_settings', [self.raw_settings]])
+        try:
+            self.s_cmd_q.append(['set_raw_settings', [self.raw_settings]])
+        except Exception:
+            pass
 
         self._ret_lock.acquire()
         for proc in self.reduction_processes:
@@ -532,6 +536,8 @@ class pipeline_thread(threading.Thread):
             ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
 
         self.pl_settings.update(kwargs)
+
+        self._load_raw_settings(self.pl_settings['raw_settings_file'])
 
         self._set_analysis_args()
 
