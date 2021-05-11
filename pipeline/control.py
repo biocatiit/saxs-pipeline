@@ -348,6 +348,7 @@ class pipeline_thread(threading.Thread):
         try:
             self.s_cmd_q.append(['set_raw_settings', [self.raw_settings]])
         except Exception:
+            # On startup loading settings happens before creating the cmd q.
             pass
 
         self._ret_lock.acquire()
