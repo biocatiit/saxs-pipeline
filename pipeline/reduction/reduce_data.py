@@ -416,7 +416,7 @@ class monitor_thread(threading.Thread):
 
                     self._commands[cmd](*args)
 
-                if self.data_dir is not None:
+                if self.data_dir is not None and os.path.exists(self.data_dir):
                     new_images = self._check_for_new_files()
 
                     if self._abort_event.is_set():
@@ -489,7 +489,10 @@ class monitor_thread(threading.Thread):
         self._cmd_q.clear()
         self._ret_q.clear()
 
-        self.dir_snapshot = [f.path for f in os.scandir(self.data_dir) if f.is_file()]
+        if os.path.exists(self.data_dir):
+            self.dir_snapshot = [f.path for f in os.scandir(self.data_dir) if f.is_file()]
+        else:
+            self.dir_snapshot = []
 
         self._abort_event.clear()
 

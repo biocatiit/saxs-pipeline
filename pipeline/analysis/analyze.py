@@ -785,8 +785,12 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, parent_proc,
         if abort_event.is_set():
             break
 
-        profiles[i], ift = model_free_analysis(profiles[i], raw_settings,
-            use_atsas, single_proc, abort_event)
+        try:
+            profiles[i], ift = model_free_analysis(profiles[i], raw_settings,
+                use_atsas, single_proc, abort_event)
+        except Exception:
+            parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+            ift = None
 
         if save_processed:
             if profiles[i] is not None:

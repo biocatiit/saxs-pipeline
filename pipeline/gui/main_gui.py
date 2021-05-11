@@ -96,7 +96,7 @@ class PipelineFrame(wx.Frame):
 
         size = (min(450, client_display.Width), min(600, client_display.Height))
         self.SetSize(self._FromDIP(size))
-
+        self.CenterOnScreen()
         self.Raise()
         self.Show()
 
@@ -295,7 +295,7 @@ class MyApp(wx.App):
         h3.setFormatter(formatter2)
 
         logger.addHandler(h2)
-        logger.addHandler(h3)
+        # logger.addHandler(h3)
 
         # sys.excepthook = self.ExceptionHook
 
@@ -390,5 +390,4 @@ if __name__ == '__main__':
     except Exception:
         traceback.print_exc()
 
-    print(logging.root.manager.loggerDict)
     main()
