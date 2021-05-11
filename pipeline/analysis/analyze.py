@@ -1189,7 +1189,19 @@ class analysis_process(multiprocessing.Process):
             denss_data = results['denss_data']
 
         else:
-            profile = sub_profile
+            if sub_profile is not None:
+                profile = sub_profile
+            elif avg_sample_prof is not None:
+                profile = avg_sample_prof
+            elif avg_buffer_prof is not None:
+                profile - avg_buffer_prof
+            elif len(sample_profiles) > 0:
+                profile = sample_profiles[0]
+            elif len(buffer_profiles) > 0:
+                profile = buffer_profiles[0]
+            else:
+                profile = None
+
             ift = None
             denss_data = None
             dammif_data = None
