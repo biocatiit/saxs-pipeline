@@ -464,6 +464,10 @@ class pipeline_thread(threading.Thread):
                             report_type, exp.output_dir], self._analysis_args]))
                         exp.analysis_last_modified = time.time()
 
+                    else:
+                        exp.analysis_last_modified = time.time()
+                        exp.analysis_finished = True
+
     def _add_analysis_to_experiment(self, results):
         logger.debug('Adding analysis to experiment')
 
@@ -700,6 +704,9 @@ class Experiment(object):
             self.sample_prefix = kwargs['sample_prefix']
             self.buffer_prefix = kwargs['buffer_prefix']
 
+        else:
+            self.num_exps = kwargs['num_exps']
+
     def add_profiles(self, new_profiles):
         if not self.collection_finished:
             if self.exp_type == 'SEC':
@@ -723,11 +730,21 @@ class Experiment(object):
 
                 self.exp_last_modified = time.time()
 
+            else:
+                self.profiles.extend(new_profiles)
+
+                if len(self.profiles) == self.num_exps:
+                    self.collection_finished = True
+
+                self.exp_last_modified = time.time()
+
     def check_exp_timeout(self, pl_settings):
         if self.exp_type == 'SEC':
             timeout = pl_settings['sec_exp_timeout']
         elif self.exp_type == 'Batch':
             timeout = pl_settings['batch_exp_timeout']
+        else:
+            timeout = pl_settings['other_exp_timeout']
 
         if timeout > 0 and self.exp_last_modified > 0:
             if time.time() - self.exp_last_modified > timeout:
@@ -739,6 +756,8 @@ class Experiment(object):
             timeout = pl_settings['sec_analysis_timeout']
         elif self.exp_type == 'Batch':
             timeout = pl_settings['batch_analysis_timeout']
+        else:
+            timeout = pl_settings['other_analysis_timeout']
 
         if timeout > 0 and self.analysis_last_modified > 0:
             if time.time() - self.analysis_last_modified > timeout:
@@ -746,11 +765,8 @@ class Experiment(object):
                 self.analysis_finished = True
 
     def stop_experiment(self):
-        if self.exp_last_modified > 0:
-            self.collection_finished = True
-
-        else:
-            self.exp_last_modified = time.time()
+        self.collection_finished = True
+        self.exp_last_modified = time.time()
 
 if __name__ == '__main__':
     mp.set_start_method('spawn')

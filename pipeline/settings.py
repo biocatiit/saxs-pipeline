@@ -52,8 +52,10 @@ class Settings(object):
             'save_raver_profiles'       : [True, 'bool', 'Data', 'Save radially averaged profiles'], #Save profiles after radial averaging as individual .dat files
             'sec_exp_timeout'           : [600, 'float', 'Analysis', 'SEC data collection timeout [s]:'], #Number of seconds without new data that causes the pipeline to assume the experiment has finished but the pipeline was not informed. -1 is infinite
             'batch_exp_timeout'         : [600, 'float', 'Analysis', 'Batch data collection timeout [s]:'], #Number of seconds without new data that causes the pipeline to assume the experiment has finished but the pipeline was not informed. -1 is infinite
+            'other_exp_timeout'         : [600, 'float', 'Analysis', 'Other data collection timeout [s]:'], #Number of seconds without new data that causes the pipeline to assume the experiment has finished but the pipeline was not informed. -1 is infinite
             'sec_analysis_timeout'      : [600, 'float', 'Analysis', 'SEC analysis timeout [s]:'], #Number of seconds to wait for analysis to finish before assuming it failed. -1 is infinite
             'batch_analysis_timeout'    : [600, 'float', 'Analysis', 'Batch analysis timeout [s]:'], #Number of seconds to wait for analysis to finish before assuming it failed. -1 is infinite
+            'other_analysis_timeout'    : [600, 'float', 'Analysis', 'Other analysis timeout [s]:'], #Number of seconds to wait for analysis to finish before assuming it failed. -1 is infinite
             'save_processed_data'       : [True, 'bool', 'Data', 'Save processed data'], #Save processed data in the analysis directory
             'save_report'               : [True, 'bool', 'Analysis', 'Save report'], #Save a report on the analysis
             'report_type'               : ['pdf', 'choice', 'Analysis', ('Report type:', ['pdf'])], #Report type, right now only pdf is allowed
