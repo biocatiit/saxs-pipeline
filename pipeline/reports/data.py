@@ -220,7 +220,7 @@ class SECData(object):
             elif self.efa_profile_type == 'Basline Corrected':
                 prof_type = 'baseline'
 
-            efa_results = raw.efa(secm, self.efa_ranges, prof_type,
+            efa_results = run_efa_for_report(secm, self.efa_ranges, prof_type,
                 int(self.efa_start), int(self.efa_end), self.efa_method,
                 int(self.efa_iter_limit), float(self.efa_tolerance))
 
@@ -283,8 +283,8 @@ class SECData(object):
             elif self.regals_profile_type == 'Basline Corrected':
                 prof_type = 'baseline'
 
-            regals_results = raw.regals(secm, self.regals_component_settings, prof_type,
-                int(self.regals_start), int(self.regals_end), self.regals_x_cal,
+            regals_results = run_regals_for_report(secm, self.regals_component_settings,
+                prof_type, int(self.regals_start), int(self.regals_end), self.regals_x_cal,
                 self.regals_run_settings['min_iter'], self.regals_run_settings['max_iter'],
                 self.regals_run_settings['tol'], self.regals_run_settings['conv_type'])
 
@@ -935,3 +935,18 @@ def parse_denss_file(filename, data=None):
         refined, rsc, rsc_std, included, res)
 
     return denss_data
+
+def run_efa_for_report(secm, efa_ranges, prof_type, efa_start, efa_end,
+    efa_method, efa_iter_limit, efa_tolerance):
+    efa_results = raw.efa(secm, efa_ranges, prof_type, int(efa_start),
+        int(efa_end), efa_method, int(efa_iter_limit), float(efa_tolerance))
+
+    return efa_results
+
+def run_regals_for_report(secm, regals_component_settings, prof_type, regals_start,
+    regals_end, regals_x_cal, min_iter, max_iter, tol, conv_type):
+    regals_results = raw.regals(secm, regals_component_settings, prof_type,
+        int(regals_start), int(regals_end), regals_x_cal, min_iter, max_iter,
+        tol, conv_type)
+
+    return regals_results
