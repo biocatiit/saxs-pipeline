@@ -34,8 +34,9 @@ import json
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
+import numpy as np
 import zmq
-import bitshift
+import bitshuffle
 import lz4
 
 
@@ -70,14 +71,15 @@ class EigerStreamClient(threading.Thread):
 
         while True:
             try:
-                if self.socket.poll(100):
-                    frames = self.socket.recv_multipart(copy=False)
+                try:
+                    frames = self.socket.recv_multipart(zmq.NOBLOCK, copy=False)
+                    self.data_queue.append(frames)
+                except zmq.ZMQError:
+                    pass
 
                 if self._stop_event.is_set():
                     logger.debug("Stop event detected")
                     break
-
-                self.data_queue.append(frames)
 
             except Exception:
                 logger.error('Error in client thread:\n{}'.format(traceback.format_exc()))
@@ -99,9 +101,7 @@ class EigerStreamClient(threading.Thread):
 
         self._stop_event.set()
 
-def EigerStreamParser():
-    def __init__(self):
-        pass
+class EigerStreamParser():
 
     def decodeFrames(self, frames):
         """
@@ -161,7 +161,7 @@ def EigerStreamParser():
         if header["header_detail"]:
             logger.debug(header['header_detail'])
 
-        if header["header_detail"] is not "none":
+        if header["header_detail"] != "none":
             for key, value in json.loads(frames[1].bytes).iteritems():
                 logger.debug(key, value)
 
@@ -231,8 +231,9 @@ if __name__ == '__main__':
             if len(return_q) > 0:
                 frames = return_q.popleft()
                 data = parser.decodeFrames(frames)
-                num_frames += 1
-                logger.debug('Got frame %i', num_frames)
+                if data is not None:
+                    num_frames += 1
+                    logger.info('Got frame %i', num_frames)
     except KeyboardInterrupt:
         pass
 
