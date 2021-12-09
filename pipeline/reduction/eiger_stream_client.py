@@ -35,6 +35,8 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import zmq
+import bitshift
+import lz4
 
 
 class EigerStreamClient(threading.Thread):
@@ -185,8 +187,7 @@ def EigerStreamParser():
         dt = np.dtype(dtype)
         blocksize = np.ndarray(shape=(), dtype=">u4", buffer=data[8:12])/dt.itemsize
         imgData = bitshuffle.decompress_lz4(blob, shape[::-1], dt, blocksize)
-        if self.__verbose__:
-            print("[OK] unpacked {0} bytes of bs-lz4 data".format(len(imgData)))
+
         return imgData
 
     def readLZ4(self, frame, shape, dtype):
@@ -200,8 +201,6 @@ def EigerStreamParser():
         dataSize = dtype.itemsize*shape[0]*shape[1] # bytes * image size
 
         imgData = lz4.block.decompress(struct.pack('<I', dataSize) + frame.bytes)
-        if self.__verbose__:
-            print("[OK] unpacked {0} bytes of lz4 data".format(len(imgData)))
 
         return np.reshape(np.fromstring(imgData, dtype=dtype), shape[::-1])
 
