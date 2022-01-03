@@ -72,12 +72,11 @@ class EigerStreamClient(threading.Thread):
             try:
                 if self.socket.poll(100):
                     frames = self.socket.recv_multipart(copy=False)
+                    self.data_queue.append(frames)
 
                 if self._stop_event.is_set():
                     logger.debug("Stop event detected")
                     break
-
-                self.data_queue.append(frames)
 
             except Exception:
                 logger.error('Error in client thread:\n{}'.format(traceback.format_exc()))
