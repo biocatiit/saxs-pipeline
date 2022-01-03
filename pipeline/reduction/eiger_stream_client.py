@@ -30,12 +30,14 @@ import traceback
 import time
 import sys
 import json
+import requests
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
+import numpy as np
 import zmq
-import bitshift
+import bitshuffle
 import lz4
 
 
@@ -57,6 +59,8 @@ class EigerStreamClient(threading.Thread):
         self.data_queue = data_queue
         self._stop_event = threading.Event()
 
+        #Should I try to seet the areadetector/eiger variables so that stream is setup properly
+
     def run(self):
         """
         Custom run method for the thread.
@@ -70,9 +74,11 @@ class EigerStreamClient(threading.Thread):
 
         while True:
             try:
-                if self.socket.poll(100):
-                    frames = self.socket.recv_multipart(copy=False)
+                try:
+                    frames = self.socket.recv_multipart(zmq.NOBLOCK, copy=False)
                     self.data_queue.append(frames)
+                except zmq.ZMQError:
+                    pass
 
                 if self._stop_event.is_set():
                     logger.debug("Stop event detected")
@@ -98,9 +104,7 @@ class EigerStreamClient(threading.Thread):
 
         self._stop_event.set()
 
-def EigerStreamParser():
-    def __init__(self):
-        pass
+class EigerStreamParser():
 
     def decodeFrames(self, frames):
         """
@@ -160,7 +164,7 @@ def EigerStreamParser():
         if header["header_detail"]:
             logger.debug(header['header_detail'])
 
-        if header["header_detail"] is not "none":
+        if header["header_detail"] != "none":
             for key, value in json.loads(frames[1].bytes).iteritems():
                 logger.debug(key, value)
 
@@ -207,14 +211,20 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
     port = '9999'
     ip = '164.54.204.141'
+
+    r = requests.put('http://164.54.204.141/stream/api/1.8.0/config/mode',
+    data='{"value": "enabled"}')
+    print(r)
+    print(r.text)
+
 
     return_q = collections.deque()
 
@@ -230,8 +240,9 @@ if __name__ == '__main__':
             if len(return_q) > 0:
                 frames = return_q.popleft()
                 data = parser.decodeFrames(frames)
-                num_frames += 1
-                logger.debug('Got frame %i', num_frames)
+                if data is not None:
+                    num_frames += 1
+                    logger.info('Got frame %i', num_frames)
     except KeyboardInterrupt:
         pass
 
