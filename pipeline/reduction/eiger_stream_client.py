@@ -59,7 +59,7 @@ class EigerStreamClient(threading.Thread):
         self.data_queue = data_queue
         self._stop_event = threading.Event()
 
-        #Should I try to seet the areadetector/eiger variables so that stream is setup properly
+        #Should I try to set the areadetector/eiger variables so that stream is setup properly?
 
     def run(self):
         """
@@ -106,7 +106,7 @@ class EigerStreamClient(threading.Thread):
 
 class EigerStreamParser():
 
-    def decodeFrames(self, frames):
+    def decodeFrames(self, frames, return_header=True):
         """
         decode and proces EIGER ZMQ stream frames
         """
@@ -131,7 +131,12 @@ class EigerStreamParser():
             logger.error("Unexpected message from Eiger stream")
             data = None
 
-        return data
+        if return_header:
+            ret = [data, header]
+        else:
+            ret = [data, None]
+
+        return ret
 
     def _decodeImage(self, frames):
         """

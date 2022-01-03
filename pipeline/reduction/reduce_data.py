@@ -27,6 +27,8 @@ import collections
 import time
 import logging
 import traceback
+import requests
+import json
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -35,6 +37,12 @@ if __name__ != '__main__':
 
 import bioxtasraw.RAWAPI as raw
 import bioxtasraw.SASExceptions as SASExceptions
+
+pipeline_path = os.path.abspath(os.path.join('.', __file__, '..', '..', '..'))
+if pipeline_path not in os.sys.path:
+    os.sys.path.append(pipeline_path)
+
+from pipeline.reduction import eiger_stream_client
 
 def load_images(filenames, settings):
     img_list, imghdr_list = raw.load_images(filenames, settings)
@@ -140,17 +148,30 @@ class monitor_and_load(threading.Thread):
             }
 
         self.waiting_for_header = []
-        self.failed = []
         self.header_timeout = 10
         self.ret_every = 10
 
         self._exp_id = None
         self.data_dir = None
+        self._fprefix = None
 
     def run(self):
-        self._monitor_thread = monitor_thread(self._monitor_cmd_q,
-            self._monitor_ret_q, self._monitor_abort, self.pl_settings,
-            self._log_lock, self._log_queue)
+        if self.pl_settings['data_source'] == 'Files':
+            self._monitor_thread = monitor_thread(self._monitor_cmd_q,
+                self._monitor_ret_q, self._monitor_abort, self.pl_settings,
+                self._log_lock, self._log_queue)
+
+        else:
+            requests.put('http://{}/stream/api/1.8.0/config/mode'.format(
+                self.pl_settings['eiger_stream_ip']), data='{"value": "enabled"}')
+
+            self._monitor_thread = eiger_stream_client.EigerStreamClient(
+                self.pl_settings['eiger_stream_ip'],
+                self.pl_settings['eiger_stream_port'],
+                self._monitor_ret_q)
+
+            self._eiger_parser = eiger_stream_client.EigerStreamParser()
+
         self._monitor_thread.start()
 
         while True:
@@ -191,7 +212,7 @@ class monitor_and_load(threading.Thread):
                         new_failed.append(item)
                         self._log('info', 'Failed to load image')
                     else:
-                        imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
+                        imgs, fnames, img_hdrs, counters = self._load_images(img)
 
                         got_new_images = True
 
@@ -207,7 +228,6 @@ class monitor_and_load(threading.Thread):
                     new_succeded = []
 
                 for item in new_failed:
-                    self.failed.append(item)
                     self.waiting_for_header.remove(item)
 
                 for item in new_succeded:
@@ -227,21 +247,40 @@ class monitor_and_load(threading.Thread):
                     new_counters = []
                     new_fnames = []
 
-                    exp_id = img_data[0]
-                    data_dir = img_data[1]
-                    loaded_imgs = img_data[2]
+                    if self.pl_settings['data_source'] == 'Files':
+                        exp_id = img_data[0]
+                        data_dir = img_data[1]
+                        new_img_data = img_data[2]
 
-                    if exp_id is None:
+                        if exp_id is None:
+                            exp_id = self._exp_id
+
+                        if data_dir is None:
+                            data_dir = self.data_dir
+
+                    else:
                         exp_id = self._exp_id
-
-                    if data_dir is None:
                         data_dir = self.data_dir
+                        nimg, header = self._eiger_parser.decodeFrames(img_data)
 
-                    for img in loaded_imgs:
+                        if nimg is not None:
+                            try:
+                                header2 = json.loads(img_data[3].bytes)
+                                header.update(header2)
+                            except Exception:
+                                logger.error('Error parsing Eiger header:\n{}'.format(traceback.format_exc()))
+
+                            # Check md5 hash of image to verify no corruption?
+                            md5_hash = header['hash']
+
+                            new_image_data = [[nimg, header]]
+
+
+                    for img in new_img_data:
                         if self._abort_event.is_set():
                             break
 
-                        imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
+                        imgs, fnames, img_hdrs, counters = self._load_images(img)
 
                         if len(imgs) > 0:
                             new_imgs.extend(imgs)
@@ -282,26 +321,33 @@ class monitor_and_load(threading.Thread):
     def _set_data_dir(self, data_dir):
         self._log('debug', 'Setting data directory: {}'.format(data_dir))
 
-        self._monitor_cmd_q.append(['set_data_dir', [data_dir,]])
+        if self.pl_settings['data_source'] == 'Files':
+            self._monitor_cmd_q.append(['set_data_dir', [data_dir,]])
 
         self.data_dir = data_dir
 
     def _set_fprefix(self, fprefix):
-        self._monitor_cmd_q.append(['set_fprefix', [fprefix,]])
+        if self.pl_settings['data_source'] == 'Files':
+            self._monitor_cmd_q.append(['set_fprefix', [fprefix,]])
+
+        self._fprefix = fprefix
 
     def _set_data_dir_fprefix(self, data_dir, fprefix):
         self._log('debug', 'Setting data directory: {}'.format(data_dir))
 
-        self._monitor_cmd_q.append(['set_data_dir_and_fprefix', [data_dir, fprefix]])
+        if self.pl_settings['data_source'] == 'Files':
+            self._monitor_cmd_q.append(['set_data_dir_and_fprefix', [data_dir, fprefix]])
 
         self.data_dir = data_dir
+        self._fprefix = fprefix
 
     def _set_experiment(self, data_dir, fprefix, exp_id):
         self._log('debug', 'Setting experiment to {}, data directory to {}'.format(exp_id, data_dir))
         self._exp_id = exp_id
         self.data_dir = data_dir
 
-        self._monitor_cmd_q.append(['set_experiment', [data_dir, fprefix, exp_id]])
+        if self.pl_settings['data_source'] == 'Files':
+            self._monitor_cmd_q.append(['set_experiment', [data_dir, fprefix, exp_id]])
 
     def _set_ret_size(self, size):
         self._log('debug', 'Setting return chunk size to {}'.format(size))
@@ -324,6 +370,42 @@ class monitor_and_load(threading.Thread):
 
         return imgs, fnames, img_hdrs, counters
 
+    def _load_counter(self, filenames, new_filenames):
+        try:
+            counters = load_counter_values(filenames, self.raw_settings, new_filenames):
+        except SASExceptions.HeaderLoadError:
+            counters = []
+
+        return counters
+
+    def _load_images(self, img):
+        if self.pl_settings['data_source'] == 'Files':
+            imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
+
+        else:
+            imgs = [img[0]]
+            img_hdrs = [img[1]]
+
+            if header is not None:
+                frame = header['frame']
+
+            else:
+                frame = 1
+
+            fname = '{}_{:05}.h5'.format(self._fprefix, frame)
+            fnames = [os.path.join(data_dir, fname)]
+            ctr_base_fnames = [os.path.join(data_dir,
+                '{}.h5'.format(self._fprefix))]
+
+            counters = self._load_counter(fnames, ctr_base_fnames)
+
+            if len(counters) == 0:
+                imgs = []
+                fnames = []
+                img_hdrs = []
+
+        return imgs, fnames, img_hdrs, counters
+
     def _set_raw_settings(self, settings):
         self._log('debug', 'Setting RAW settings')
 
@@ -339,7 +421,6 @@ class monitor_and_load(threading.Thread):
         self._monitor_ret_q.clear()
 
         self.waiting_for_header = []
-        self.failed = []
 
         self._abort_event.clear()
 
