@@ -280,7 +280,7 @@ class StatusPanel(wx.Panel):
         pt = self.main_frame.pipeline_thread
 
         if pt is not None:
-            logger.debug('Updating GUI status from pipeline')
+            # logger.debug('Updating GUI status from pipeline')
             pl = self.main_frame.pipeline_ret_lock
             pl.acquire()
             data_dir = pt.data_dir
@@ -345,7 +345,7 @@ class StatusPanel(wx.Panel):
                 self.exp_proc_ctrl.SetLabel(processed_exps)
                 self.processed_exps = processed_exps
 
-            logger.debug('Done updating GUI status from pipeline')
+            # logger.debug('Done updating GUI status from pipeline')
 
     def on_exit(self):
         self._status_timer.Stop()

@@ -273,7 +273,9 @@ class monitor_and_load(threading.Thread):
                             # Check md5 hash of image to verify no corruption?
                             md5_hash = header['hash']
 
-                            new_image_data = [[nimg, header]]
+                            new_img_data = [[nimg, header]]
+                        else:
+                            new_img_data = []
 
 
                     for img in new_img_data:
@@ -345,6 +347,7 @@ class monitor_and_load(threading.Thread):
         self._log('debug', 'Setting experiment to {}, data directory to {}'.format(exp_id, data_dir))
         self._exp_id = exp_id
         self.data_dir = data_dir
+        self._fprefix = fprefix
 
         if self.pl_settings['data_source'] == 'Files':
             self._monitor_cmd_q.append(['set_experiment', [data_dir, fprefix, exp_id]])
@@ -372,7 +375,7 @@ class monitor_and_load(threading.Thread):
 
     def _load_counter(self, filenames, new_filenames):
         try:
-            counters = load_counter_values(filenames, self.raw_settings, new_filenames):
+            counters = load_counter_values(filenames, self.raw_settings, new_filenames)
         except SASExceptions.HeaderLoadError:
             counters = []
 
@@ -386,18 +389,20 @@ class monitor_and_load(threading.Thread):
             imgs = [img[0]]
             img_hdrs = [img[1]]
 
-            if header is not None:
-                frame = header['frame']
+            if img_hdrs[0] is not None:
+                frame = int(img_hdrs[0]['frame']) + 1
 
             else:
                 frame = 1
 
-            fname = '{}_{:05}.h5'.format(self._fprefix, frame)
-            fnames = [os.path.join(data_dir, fname)]
-            ctr_base_fnames = [os.path.join(data_dir,
-                '{}.h5'.format(self._fprefix))]
+            fname = '{}_{:06}.h5'.format(self._fprefix, frame)
+            fnames = [fname]
+            ctr_base_fnames = [os.path.join(self.data_dir,
+                '{}_data_000001.h5'.format(self._fprefix))]
 
-            counters = self._load_counter(fnames, ctr_base_fnames)
+            # self._log('info', fnames)
+            # self._log('info', ctr_base_fnames)
+            counters = self._load_counter(ctr_base_fnames, fnames)
 
             if len(counters) == 0:
                 imgs = []

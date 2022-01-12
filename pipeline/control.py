@@ -430,7 +430,7 @@ class pipeline_thread(threading.Thread):
             self.experiments[exp_id].add_profiles(profiles)
 
     def _check_exp_status(self):
-        logger.debug('Checking experiment status')
+        # logger.debug('Checking experiment status')
 
         save_proc_data = self.pl_settings['save_processed_data']
         save_report = self.pl_settings['save_report']
@@ -495,7 +495,7 @@ class pipeline_thread(threading.Thread):
                 exp.analysis_finished = True
 
     def _check_analysis_status(self):
-        logger.debug('Checking analysis status')
+        # logger.debug('Checking analysis status')
 
         exp_keys = list(self.experiments.keys())
 
