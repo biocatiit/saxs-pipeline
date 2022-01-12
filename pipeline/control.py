@@ -296,7 +296,7 @@ class pipeline_thread(threading.Thread):
         self._ret_lock.release()
 
         if not os.path.exists(self.output_dir):
-            os.mkdir(self.output_dir)
+            os.makedirs(self.output_dir)
 
         if self.current_experiment in self.experiments:
             self.experiments[self.current_experiment].output_dir = output_dir
@@ -369,6 +369,7 @@ class pipeline_thread(threading.Thread):
         exp_type = args[1]
         data_dir = args[2]
         fprefix = args[3]
+        output_dir = args[4]
 
         if exp_name not in self.experiments:
             new_exp = Experiment(exp_name, exp_type, data_dir, fprefix,
@@ -391,9 +392,12 @@ class pipeline_thread(threading.Thread):
         self._ret_lock.release()
 
         if self.pl_settings['use_default_output_dir']:
-            output_dir = os.path.join(data_dir,
+            new_output_dir = os.path.join(data_dir,
                 self.pl_settings['default_output_dir'])
 
+            self._set_output_dir(new_output_dir)
+
+        elif output_dir != '':
             self._set_output_dir(output_dir)
 
         self.r_cmd_q.put_nowait(['set_experiment', [copy.deepcopy(self.data_dir),
