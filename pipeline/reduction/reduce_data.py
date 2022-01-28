@@ -157,11 +157,13 @@ class monitor_and_load(threading.Thread):
 
     def run(self):
         if self.pl_settings['data_source'] == 'Files':
+            self._log('debug', 'Starting file monitor')
             self._monitor_thread = monitor_thread(self._monitor_cmd_q,
                 self._monitor_ret_q, self._monitor_abort, self.pl_settings,
                 self._log_lock, self._log_queue)
 
         else:
+            self._log('debug', "Starting Eiger Stream monitor")
             requests.put('http://{}/stream/api/1.8.0/config/mode'.format(
                 self.pl_settings['eiger_stream_ip']), data='{"value": "enabled"}')
 
