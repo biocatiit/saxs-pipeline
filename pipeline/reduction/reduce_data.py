@@ -397,6 +397,8 @@ class monitor_and_load(threading.Thread):
             else:
                 frame = 1
 
+            self._log('debug', 'Received image {} from Eiger'.format(img_name))
+
             fname = '{}_{:06}.h5'.format(self._fprefix, frame)
             fnames = [fname]
             ctr_base_fnames = [os.path.join(self.data_dir,

@@ -584,6 +584,8 @@ def generate_exp_params(profiles, ifts, series):
 def generate_series_params(profiles, ifts, series, extra_data):
     styles = getSampleStyleSheet()
 
+    has_series_data = False
+
     name_list = []
 
     for s in series:
@@ -670,6 +672,9 @@ def generate_series_params(profiles, ifts, series, extra_data):
         series_table = KeepTogether([series_text, series_table])
 
         elements = [series_table]
+
+        has_series_data = True
+
     else:
         elements = [series_text]
 
@@ -777,6 +782,8 @@ def generate_series_params(profiles, ifts, series, extra_data):
             efa_elements.append(efa_title)
             efa_elements.append(efa_table)
             efa_elements.append(efa_figure)
+
+            has_series_data = True
 
     elements.extend(efa_elements)
 
@@ -976,9 +983,11 @@ def generate_series_params(profiles, ifts, series, extra_data):
             regals_elements.append(regals_comp_table)
             regals_elements.append(regals_figure)
 
+            has_series_data = True
+
     elements.extend(regals_elements)
 
-    if len(elements) == 1:
+    if not has_series_data:
         elements = []
 
     return elements
