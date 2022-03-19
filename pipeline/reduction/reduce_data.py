@@ -284,7 +284,7 @@ class monitor_and_load(threading.Thread):
                         if self._abort_event.is_set():
                             break
 
-                        imgs, fnames, img_hdrs, counters = self._load_images(img)
+                        imgs, fnames, img_hdrs, counters = self._load_images(img, new_image=True)
 
                         if len(imgs) > 0:
                             new_imgs.extend(imgs)
@@ -379,11 +379,11 @@ class monitor_and_load(threading.Thread):
         try:
             counters = load_counter_values(filenames, self.raw_settings, new_filenames)
         except SASExceptions.HeaderLoadError:
-            counters = []
+            counters = [{}]
 
         return counters
 
-    def _load_images(self, img):
+    def _load_images(self, img, new_image=False):
         if self.pl_settings['data_source'] == 'Files':
             imgs, fnames, img_hdrs, counters  = self._load_image_and_counter(img)
 
@@ -397,18 +397,18 @@ class monitor_and_load(threading.Thread):
             else:
                 frame = 1
 
-            self._log('debug', 'Received image {} from Eiger'.format(img_name))
 
             fname = '{}_{:06}.h5'.format(self._fprefix, frame)
             fnames = [fname]
             ctr_base_fnames = [os.path.join(self.data_dir,
                 '{}_data_000001.h5'.format(self._fprefix))]
 
-            # self._log('info', fnames)
-            # self._log('info', ctr_base_fnames)
+            if new_image:
+                self._log('debug', 'Received image {} from Eiger'.format(fname))
+
             counters = self._load_counter(ctr_base_fnames, fnames)
 
-            if len(counters) == 0:
+            if len(counters) == 0 or len(counters[0]) == 0:
                 imgs = []
                 fnames = []
                 img_hdrs = []
