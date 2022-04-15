@@ -128,11 +128,11 @@ class pipeline_thread(threading.Thread):
 
         # For the moment, current architechture doesn't allow more than 1 reduction process
         # Can revist if necessary, will leave everything in place.
-        # for i in range(self.pl_settings['r_procs']):
-        #     self._start_reduction_process()
-
-        for i in range(1):
+        for i in range(self.pl_settings['r_procs']):
             self._start_reduction_process()
+
+        # for i in range(1):
+        #     self._start_reduction_process()
 
         for i in range(self.pl_settings['a_procs']):
             self._start_analysis_process()

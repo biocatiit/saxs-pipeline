@@ -40,7 +40,7 @@ class Settings(object):
 
         self._params = {
             'image_exts'                : [['.tiff', '.tif'], 'list', 'Data', 'Image extensions:'], #used to filter files in the monitor and load thread
-            # 'r_procs'                   : [1, 'int', 'Startup', 'Radial averaging processes:'], #Number of reduction processes to start by default ***Note: for now limited to 1
+            'r_procs'                   : [1, 'int', 'Startup', 'Radial averaging processes:'], #Number of reduction processes to start by default ***Note: for now limited to 1
             'a_procs'                   : [1, 'int', 'Startup', 'Analysis processes:'], #Number of analysis processes to start by default
             'raw_settings_file'         : ['', 'str', 'Startup', 'RAW settings file:'], #RAW settings file to give to the pipeline on startup
             'default_output_dir'        : ['..', 'str', 'Data', 'Default output directory:'], #The default output directory location, relative to the data directory
