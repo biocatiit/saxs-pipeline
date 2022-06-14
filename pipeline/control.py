@@ -99,7 +99,8 @@ class pipeline_thread(threading.Thread):
         self.manager = mp.Manager()
 
         #Reduction queues, locks, etc
-        self.r_cmd_q = self.manager.Queue()
+        self.r_cmd_qs = []
+        # self.r_cmd_q = self.manager.Queue()
         self.r_ret_q = self.manager.Queue()
         self.r_cmd_lock = self.manager.Lock()
         self.r_ret_lock = self.manager.Lock()
@@ -216,7 +217,10 @@ class pipeline_thread(threading.Thread):
 
         managed_internal_q = self.manager.Queue()
 
-        proc = reduce_data.raver_process(self.r_cmd_q, self.r_ret_q,
+        r_cmd_q = self.manager.Queue()
+        self.r_cmd_qs.append(r_cmd_q)
+
+        proc = reduce_data.raver_process(r_cmd_q, self.r_ret_q,
             self.r_cmd_lock, self.r_ret_lock, self.r_abort_event,
             self.raw_settings_file, self.pl_settings, self.mp_log_lock,
             self.mp_log_queue, managed_internal_q, self.num_loaded,
@@ -259,7 +263,8 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.r_cmd_q.put_nowait(['set_data_dir', [copy.deepcopy(self.data_dir)], {}])
+        for r_cmd_q in self.r_cmd_qs:
+            r_cmd_q.put_nowait(['set_data_dir', [copy.deepcopy(self.data_dir)], {}])
 
     def _set_fprefix(self, fprefix):
         logger.debug('Setting file prefix: %s' %fprefix)
@@ -268,7 +273,8 @@ class pipeline_thread(threading.Thread):
         self.fprefix = fprefix
         self._ret_lock.release()
 
-        self.r_cmd_q.put_nowait(['set_fprefix', [self.fprefix], {}])
+        for r_cmd_q in self.r_cmd_qs:
+            r_cmd_q.put_nowait(['set_fprefix', [self.fprefix], {}])
 
     def _set_data_dir_and_fprefix(self, data_dir, fprefix):
         logger.debug('Setting data directory and file prefix: %s, %s', data_dir,
@@ -285,8 +291,9 @@ class pipeline_thread(threading.Thread):
 
             self._set_output_dir(output_dir)
 
-        self.r_cmd_q.put_nowait(['set_data_dir_and_fprefix', [copy.deepcopy(self.data_dir),
-            copy.deepcopy(self.fprefix)], {}])
+        for r_cmd_q in self.r_cmd_qs:
+            r_cmd_q.put_nowait(['set_data_dir_and_fprefix', [copy.deepcopy(self.data_dir),
+                copy.deepcopy(self.fprefix)], {}])
 
     def _set_output_dir(self, output_dir):
         logger.debug('Setting output directory: %s', output_dir)
@@ -400,8 +407,9 @@ class pipeline_thread(threading.Thread):
         elif output_dir != '':
             self._set_output_dir(output_dir)
 
-        self.r_cmd_q.put_nowait(['set_experiment', [copy.deepcopy(self.data_dir),
-            copy.deepcopy(self.fprefix), copy.deepcopy(self.current_experiment)], {}])
+        for r_cmd_q in self.r_cmd_qs:
+            r_cmd_q.put_nowait(['set_experiment', [copy.deepcopy(self.data_dir),
+                copy.deepcopy(self.fprefix), copy.deepcopy(self.current_experiment)], {}])
 
     def _stop_experiment(self, exp_name):
         logger.debug('Stopping experiment %s', exp_name)
