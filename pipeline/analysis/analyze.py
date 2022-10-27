@@ -26,6 +26,8 @@ import time
 import queue
 import traceback
 import threading
+from concurrent.futures import ThreadPoolExecutor as ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor as ProcessPoolExecutor
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -99,14 +101,45 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
 
     raw.save_ift(temp_ift, datadir=dammif_dir)
 
-    for i in range(nruns):
-        if abort_event.is_set():
-            break
+    # for i in range(nruns):
+    #     if abort_event.is_set():
+    #         break
 
-        chi_sq, rg, dmax, mw, ev = raw.dammif(temp_ift,
-            '{}_{:02d}'.format(prefix, i+1), dammif_dir, mode=mode,
-            write_ift=write_ift, ift_name=ift_name, abort_event=abort_event,
-            unit='Angstrom')
+    #     chi_sq, rg, dmax, mw, ev = raw.dammif(temp_ift,
+    #         '{}_{:02d}'.format(prefix, i+1), dammif_dir, mode=mode,
+    #         write_ift=write_ift, ift_name=ift_name, abort_event=abort_event,
+    #         unit='Angstrom')
+
+    #     chi_sq_vals.append(chi_sq)
+    #     rg_vals.append(rg)
+    #     dmax_vals.append(dmax)
+    #     mw_vals.append(mw)
+    #     ev_vals.append(ev)
+
+    with ThreadPoolExecutor() as executor:
+        future_list = []
+        for i in range(nruns):
+            if abort_event.is_set():
+                break
+
+            f = executor.submit(raw.dammif, temp_ift,
+                '{}_{:02d}'.format(prefix, i+1), dammif_dir, mode=mode,
+                write_ift=write_ift, ift_name=ift_name, abort_event=abort_event,
+                unit='Angstrom')
+
+            future_list.append(f)
+
+        all_done = False
+
+        while not all_done:
+            all_done = all([f.done() for f in future_list])
+            time.sleep(0.1)
+
+    if abort_event.is_set():
+        return None
+
+    for f in future_list:
+        chi_sq, rg, dmax, mw, ev = f.result()
 
         chi_sq_vals.append(chi_sq)
         rg_vals.append(rg)
@@ -114,15 +147,19 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         mw_vals.append(mw)
         ev_vals.append(ev)
 
-
-    if abort_event.is_set():
-        return None
+    if os.path.exists(os.path.join(dammif_dir, '{}_{:02d}-1.cif'.format(prefix, 1))):
+        new_atsas = True
+        rext = '.cif'
+    else:
+        new_atsas = False
+        rext = '.pdb'
 
     #Average the bead model reconstructions
-    damaver_files = ['{}_{:02d}-1.pdb'.format(prefix, i+1) for i in range(nruns)]
+    damaver_files = ['{}_{:02d}-1{}'.format(prefix, i+1, rext) for i in range(nruns)]
+
     if average and nruns>1:
         (mean_nsd, stdev_nsd, rep_model, result_dict, res, res_err,
-            res_unit) = raw.damaver(damaver_files, prefix, dammif_dir,
+            res_unit, cluster_list) = raw.damaver(damaver_files, prefix, dammif_dir,
                 abort_event=abort_event)
 
         nsd_inc = 0
@@ -166,24 +203,52 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
             ev_vals[i], mw_vals[i], nsd])
 
     if average and nruns>1:
-        damaver_name = os.path.join(dammif_dir, prefix+'_damaver.pdb')
-        damfilt_name = os.path.join(dammif_dir, prefix+'_damfilt.pdb')
+        if new_atsas:
+            damaver_name = os.path.join(dammif_dir, prefix+'-global-damaver'+rext)
+            damfilt_name = os.path.join(dammif_dir, prefix+'-global-damfilt'+rext)
 
-        atoms, header, model_info= SASFileIO.loadPDBFile(damaver_name)
+        else:
+            damaver_name = os.path.join(dammif_dir, prefix+'_damaver'+rext)
+            damfilt_name = os.path.join(dammif_dir, prefix+'_damfilt'+rext)
+
+        if rext == '.pdb':
+            atoms, header, model_info = SASFileIO.loadPDBFile(damaver_name)
+        elif rext == '.cif':
+            atoms, header, model_info = SASFileIO.loadmmCIFFile(damaver_name)
+
+        if new_atsas:
+            model_info['dmax'] = ''
+            model_info['rg'] = ''
+            model_info['mw'] = ''
+
         model_data.append(['damaver', model_info['chisq'], model_info['rg'],
             model_info['dmax'], model_info['excluded_volume'], model_info['mw'],
             ''])
 
-        atoms, header, model_info = SASFileIO.loadPDBFile(damfilt_name)
+        if rext == '.pdb':
+            atoms, header, model_info = SASFileIO.loadPDBFile(damfilt_name)
+        elif rext == '.cif':
+            atoms, header, model_info = SASFileIO.loadmmCIFFile(damfilt_name)
+
+        if new_atsas:
+            model_info['dmax'] = ''
+            model_info['rg'] = ''
+            model_info['mw'] = ''
+
         model_data.append(['damfilt', model_info['chisq'], model_info['rg'],
             model_info['dmax'], model_info['excluded_volume'], model_info['mw'],
             ''])
-
     #Cluster the bead model reconstructions
-    if cluster and nruns > 1:
+    if cluster and nruns > 1 and not new_atsas:
         cluster_list, distance_list = raw.damclust(damaver_files, prefix,
             dammif_dir, abort_event=abort_event)
+    else:
+        clust_num = []
+        clist_data = []
+        dlist_data = []
+        distance_list = []
 
+    if len(cluster_list) > 0:
         clust_num = ('Number of clusters:', len(cluster_list))
 
         clist_data = []
@@ -192,6 +257,15 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
             if cl.dev == -1:
                 isolated = 'Y'
                 dev = ''
+
+            elif cl.dev is None:
+                if len(cl.included_models) + len(cl.discarded_models) > 1:
+                    isolated = 'N'
+                else:
+                    isolated = 'Y'
+
+                dev = ''
+
             else:
                 isolated = 'N'
                 dev = str(cl.dev)
@@ -200,11 +274,6 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
 
         dlist_data = [list(map(str, d_data)) for d_data in distance_list]
 
-    else:
-        clust_num = []
-        clist_data = []
-        dlist_data = []
-
     if abort_event.is_set():
         return None
 
@@ -212,7 +281,7 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
     do_refine = average and refine and nruns > 1
     if do_refine:
         chi_sq, rg, dmax, mw, ev = raw.dammin(temp_ift, 'refine_{}'.format(prefix),
-            dammif_dir, 'Refine', initial_dam='{}_damstart.pdb'.format(prefix),
+            dammif_dir, 'Refine', initial_dam='{}_damstart{}'.format(prefix, rext),
             write_ift=False, ift_name=ift_name, abort_event=abort_event,
             unit='Angstrom')
 
@@ -373,9 +442,40 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         denss_results.append([q_fit, I_extrap, err_extrap, q_fit, I_fit,
             all_chi_sq, all_rg, all_support_vol])
 
+    # with ProcessPoolExecutor() as executor:
+    #     future_list = []
+    #     for i in range(nruns):
+    #         if abort_event.is_set():
+    #             break
+
+    #         f = executor.submit(raw.denss, ift,
+    #         '{}_{:02d}'.format(prefix, i+1), denss_dir, mode=mode,
+    #         abort_event=abort_event)
+
+    #         future_list.append(f)
+
+    #     all_done = False
+
+    #     while not all_done:
+    #         all_done = all([f.done() for f in future_list])
+    #         time.sleep(0.1)
 
     if abort_event.is_set():
         return None
+
+    # for f in future_list:
+    #     (rho, chi_sq, rg, support_vol, side, q_fit, I_fit, I_extrap,
+    #         err_extrap, all_chi_sq, all_rg, all_support_vol) = f.result()
+
+    #     rhos.append(rho)
+    #     chi_vals.append(chi_sq)
+    #     rg_vals.append(rg)
+    #     support_vol_vals.append(support_vol)
+    #     sides.append(side)
+    #     fit_data.append([q_fit, I_fit, I_extrap, err_extrap])
+
+    #     denss_results.append([q_fit, I_extrap, err_extrap, q_fit, I_fit,
+    #         all_chi_sq, all_rg, all_support_vol])
 
     #Average the electron reconstructions
     rsc_data = []

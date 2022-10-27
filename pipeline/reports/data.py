@@ -874,7 +874,10 @@ def parse_dammif_file(filename, data=None):
         elif 'Ensemble resolution' in line:
             res_data = line.split(':')[-1].strip()
             res = float(res_data.split('+')[0].strip())
-            res_err = float(res_data.split('-')[1].strip().split(' ')[0].strip())
+            try:
+                res_err = float(res_data.split('-')[1].strip().split(' ')[0].strip())
+            except Exception:
+                res_err = 0
         elif 'Number of clusters' in line:
             clusters = int(line.split(':')[-1].strip())
         elif 'Output prefix' in line:
