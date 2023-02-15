@@ -230,10 +230,29 @@ class monitor_and_load(threading.Thread):
                     new_succeded = []
 
                 for item in new_failed:
-                    self.waiting_for_header.remove(item)
+                    img, initial_t, exp_id, data_dir = item
+
+                    for i in range(len(self.waiting_for_header)):
+                        item2 = self.waiting_for_header[i]
+                        img2, initial_t2, exp_id2, data_dir2 = item2
+
+                        if initial_t == initial_t2 and exp_id == exp_id2:
+                            self.waiting_for_header.pop(i)
+                            break
+
+                    # if item in self.waiting_for_header:
+                    #     self.waiting_for_header.remove(item)
 
                 for item in new_succeded:
-                    self.waiting_for_header.remove(item)
+                    img, initial_t, exp_id, data_dir = item
+
+                    for i in range(len(self.waiting_for_header)):
+                        item2 = self.waiting_for_header[i]
+                        img2, initial_t2, exp_id2, data_dir2 = item2
+
+                        if initial_t == initial_t2 and exp_id == exp_id2:
+                            self.waiting_for_header.pop(i)
+                            break
 
                 try:
                     new_images = []
