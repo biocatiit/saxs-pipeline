@@ -889,7 +889,10 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, parent_proc,
             profiles[i], ift = model_free_analysis(profiles[i], raw_settings,
                 use_atsas, single_proc, abort_event)
         except Exception:
-            parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+            if parent_proc is not None:
+                parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+            else:
+                print("Error in analysis process:\n{}".format(traceback.format_exc()))
             ift = None
 
         if save_processed:
@@ -926,7 +929,10 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, parent_proc,
                         all_dammif_data.append(dammif_data)
 
                 except Exception:
-                    parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+                    if parent_proc is not None:
+                        parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+                    else:
+                        print("Error in analysis process:\n{}".format(traceback.format_exc()))
 
             if abort_event.is_set():
                 break
@@ -968,7 +974,10 @@ def analyze_data(out_dir, profiles, ifts, raw_settings, parent_proc,
                 all_denss_data.append(denss_data)
 
         except Exception:
-            parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+            if parent_proc is not None:
+                parent_proc._log('error', "Error in analysis process:\n{}".format(traceback.format_exc()))
+            else:
+                print("Error in analysis process:\n{}".format(traceback.format_exc()))
 
     all_ifts = new_ifts + ifts
 

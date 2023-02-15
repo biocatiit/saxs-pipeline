@@ -679,6 +679,8 @@ class raver_process(mp.Process):
         self.monitor_thread.start()
 
         while True:
+            self.active = False
+
             try:
                 if self._stop_event.is_set():
                     break
