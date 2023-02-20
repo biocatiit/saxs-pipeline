@@ -427,10 +427,10 @@ class monitor_and_load(threading.Thread):
 
             counters = self._load_counter(ctr_base_fnames, fnames)
 
-            if len(counters) == 0 or len(counters[0]) == 0:
-                imgs = []
-                fnames = []
-                img_hdrs = []
+        if len(counters) == 0 or len(counters[0]) == 0:
+            imgs = []
+            fnames = []
+            img_hdrs = []
 
         return imgs, fnames, img_hdrs, counters
 
