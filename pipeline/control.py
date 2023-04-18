@@ -428,34 +428,37 @@ class pipeline_thread(threading.Thread):
             if not exp.collection_finished:
                 exp.check_exp_timeout(self.pl_settings)
 
-            if (exp.collection_finished and exp.analysis_last_modified == -1
-                and (len(exp.profiles) == exp.num_exps
-                    or time.time() > exp.exp_last_modified +15)):
-                self.active = True
+            if (exp.collection_finished and exp.analysis_last_modified == -1):
+                if ((exp.exp_type == 'Batch' and ((len(exp.profiles) == exp.num_sample_exps
+                    and len(exp.buffer_profiles) == exp.num_buffer_exps)
+                    or time.time() > exp.exp_last_modified +300))
+                    or (exp.exp_type != 'Batch' and (len(exp.profiles) == exp.num_exps 
+                    or time.time() > exp.exp_last_modified +300))):
+                    self.active = True
 
-                logger.info('Experiment %s data collection finished', exp.exp_name)
+                    logger.info('Experiment %s data collection finished', exp.exp_name)
 
-                with self._ret_lock:
-                    self.exp_being_processed += 1
+                    with self._ret_lock:
+                        self.exp_being_processed += 1
 
-                with self.a_cmd_lock:
-                    if exp.exp_type == 'SEC':
-                        self.a_cmd_q.put_nowait(copy.deepcopy(['make_and_analyze_series',
-                            exp.exp_name, [exp.analysis_dir, exp.profiles,
-                            save_proc_data, save_report, report_type,
-                            exp.output_dir], self._analysis_args]))
-                        exp.analysis_last_modified = time.time()
+                    with self.a_cmd_lock:
+                        if exp.exp_type == 'SEC':
+                            self.a_cmd_q.put_nowait(copy.deepcopy(['make_and_analyze_series',
+                                exp.exp_name, [exp.analysis_dir, exp.profiles,
+                                save_proc_data, save_report, report_type,
+                                exp.output_dir], self._analysis_args]))
+                            exp.analysis_last_modified = time.time()
 
-                    elif exp.exp_type == 'Batch':
-                        self.a_cmd_q.put_nowait(copy.deepcopy(['subtract_and_analyze_batch',
-                            exp.exp_name, [exp.analysis_dir, exp.profiles,
-                            exp.buffer_profiles, save_proc_data, save_report,
-                            report_type, exp.output_dir], self._analysis_args]))
-                        exp.analysis_last_modified = time.time()
+                        elif exp.exp_type == 'Batch':
+                            self.a_cmd_q.put_nowait(copy.deepcopy(['subtract_and_analyze_batch',
+                                exp.exp_name, [exp.analysis_dir, exp.profiles,
+                                exp.buffer_profiles, save_proc_data, save_report,
+                                report_type, exp.output_dir], self._analysis_args]))
+                            exp.analysis_last_modified = time.time()
 
-                    else:
-                        exp.analysis_last_modified = time.time()
-                        exp.analysis_finished = True
+                        else:
+                            exp.analysis_last_modified = time.time()
+                            exp.analysis_finished = True
 
     def _add_analysis_to_experiment(self, results):
         logger.debug('Adding analysis to experiment')

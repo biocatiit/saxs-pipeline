@@ -76,6 +76,12 @@ def load_images_and_counters(filenames, settings):
     for fname in filenames:
         imgs, img_hdrs = raw.load_images([fname,], settings)
 
+        ext = os.path.splitext(fname)[1]
+        if ext == '.h5' or ext == '.hdf5':
+            is_hdf5 = True
+        else:
+            is_hdf5 = False
+
         if all(map(lambda img: img is not None, imgs)):
             img_list.extend(imgs)
             img_hdr_list.extend(img_hdrs)
@@ -83,7 +89,7 @@ def load_images_and_counters(filenames, settings):
             new_fnames = []
 
             for i in range(len(imgs)):
-                if len(imgs) > 1:
+                if len(imgs) > 1 or is_hdf5:
                     temp_fname = os.path.split(fname)[1].split('.')
                     if len(temp_fname) > 1:
                         temp_fname[-2] = temp_fname[-2] + '_%05i' %(i+1)
@@ -148,7 +154,7 @@ class monitor_and_load(threading.Thread):
             }
 
         self.waiting_for_header = []
-        self.header_timeout = 10
+        self.header_timeout = 180
         self.ret_every = 10
 
         self._exp_id = None
