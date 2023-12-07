@@ -305,8 +305,9 @@ class MyApp(wx.App):
         title = 'SAXS Pipeline'
 
         #server_ip = '164.54.204.82' #zaphod
-        server_ip = '164.54.204.142' #epu
+        # server_ip = '164.54.204.142' #epu
         # server_ip = '192.168.1.14'
+        server_ip = '10.48.159.89'
         server_port = '5556'
 
         if len(sys.argv) == 2:
