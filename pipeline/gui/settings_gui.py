@@ -201,7 +201,8 @@ class SettingsSubPanel(scrolled.ScrolledPanel):
 
                     else:
                         label = wx.StaticText(box, label=values[3])
-                        ctrl = wx.TextCtrl(box, name=key)
+                        ctrl = wx.TextCtrl(box, name=key,
+                            size=self._FromDIP((100,-1)))
 
                         grid_sizer.Add(label, (row, 0),
                             flag=wx.ALIGN_CENTER_VERTICAL)
