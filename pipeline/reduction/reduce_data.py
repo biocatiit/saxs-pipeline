@@ -121,9 +121,9 @@ def load_images_and_counters(filenames, settings):
                     temp_filename = os.path.split(filename)[1].split('.')
 
                     if len(temp_filename) > 1:
-                        temp_filename[-2] = temp_filename[-2] + '_%05i' %(i+file_num+offset+1)
+                        temp_filename[-2] = temp_filename[-2] + '_%05i' %(i+offset+1)
                     else:
-                        temp_filename[0] = temp_filename[0] + '_%05i' %(i+file_num+offset+1)
+                        temp_filename[0] = temp_filename[0] + '_%05i' %(i+offset+1)
 
                     new_filename = '.'.join(temp_filename)
                 else:
