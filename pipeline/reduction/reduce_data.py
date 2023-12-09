@@ -73,10 +73,10 @@ def load_images_and_counters(filenames, settings):
     filename_list = []
     failed = []
 
-    for fname in filenames:
-        imgs, img_hdrs = raw.load_images([fname,], settings)
+    for filename in filenames:
+        imgs, img_hdrs = raw.load_images([filename,], settings)
 
-        ext = os.path.splitext(fname)[1]
+        ext = os.path.splitext(filename)[1]
         if ext == '.h5' or ext == '.hdf5':
             is_hdf5 = True
         else:
@@ -139,7 +139,7 @@ def load_images_and_counters(filenames, settings):
             filename_list.extend(new_fnames)
 
         else:
-            failed.append(fname)
+            failed.append(filename)
 
     return img_list, img_hdr_list, counter_list, filename_list, failed
 
