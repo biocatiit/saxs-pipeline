@@ -89,19 +89,47 @@ def load_images_and_counters(filenames, settings):
             new_fnames = []
 
             for i in range(len(imgs)):
-                if len(imgs) > 1 or is_hdf5:
-                    temp_fname = os.path.split(fname)[1].split('.')
-                    if len(temp_fname) > 1:
-                        temp_fname[-2] = temp_fname[-2] + '_%05i' %(i+1)
+                img = new_data[i]
+                img_hdr = new_hdr[i]
+
+                if i == 0 and (len(new_data) > 1 or is_hdf5):
+
+                    temp_filename = os.path.split(filename)[1].split('.')
+
+                    if len(temp_filename) > 1:
+                        temp_filename[-2] = temp_filename[-2] + '_%05i' %(i+1)
                     else:
-                        temp_fname[0] = temp_fname[0] + '_%05i' %(i+1)
+                        temp_filename[0] = temp_filename[0] + '_%05i' %(i+1)
 
-                    new_fname = '.'.join(temp_fname)
+                    new_filename = '.'.join(temp_filename)
+
+                    base_hdr = hdrfile_info = loadHeader(filename, new_filename, hdr_fmt)
+
+                    if not filename.endswith('master.h5'):
+                        sname_offset = int(os.path.splitext(filename)[0].split('_')[-1])-1
+                    else:
+                        sname_offset = 0
+
+                    if 'Number_of_images_per_file' in base_hdr:
+                        mult = int(base_hdr['Number_of_images_per_file'])
+                    else:
+                        mult = len(new_data)
+
+                    offset = sname_offset*mult
+
+                if len(new_data) > 1 or is_hdf5:
+                    temp_filename = os.path.split(filename)[1].split('.')
+
+                    if len(temp_filename) > 1:
+                        temp_filename[-2] = temp_filename[-2] + '_%05i' %(i+file_num+offset+1)
+                    else:
+                        temp_filename[0] = temp_filename[0] + '_%05i' %(i+file_num+offset+1)
+
+                    new_filename = '.'.join(temp_filename)
                 else:
-                    new_fname = os.path.split(fname)[1]
+                    new_filename = os.path.split(filename)[1]
 
-
-                new_fnames.append(new_fname)
+                new_fnames.append(new_filename)
 
             counters = raw.load_counter_values([fname for n in new_fnames],
                 settings, new_fnames)
