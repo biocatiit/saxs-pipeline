@@ -103,7 +103,7 @@ def load_images_and_counters(filenames, settings):
 
                     new_filename = '.'.join(temp_filename)
 
-                    base_hdr = hdrfile_info = loadHeader(filename, new_filename, hdr_fmt)
+                    base_hdr = hdrfile_info = load_counter_values([filename], settings, [new_filename])
 
                     if not filename.endswith('master.h5'):
                         sname_offset = int(os.path.splitext(filename)[0].split('_')[-1])-1
