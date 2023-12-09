@@ -248,15 +248,18 @@ class monitor_and_load(threading.Thread):
                         new_failed.append(item)
                         self._log('info', 'Failed to load image')
                     else:
-                        imgs, fnames, img_hdrs, counters = self._load_images(img)
-
-                        got_new_images = True
+                        try:
+                            imgs, fnames, img_hdrs, counters = self._load_images(img)
+                        except Exception:
+                            imgs = []
 
                         if len(imgs) > 0:
                             new_succeded.append(item)
 
                             self._ret_q.append([imgs, fnames, img_hdrs, counters,
                                 exp_id, data_dir])
+
+                            got_new_images = True
 
                 if self._abort_event.is_set():
                     self._abort()
@@ -337,7 +340,11 @@ class monitor_and_load(threading.Thread):
                         if self._abort_event.is_set():
                             break
 
-                        imgs, fnames, img_hdrs, counters = self._load_images(img, new_image=True)
+                        try:
+                            imgs, fnames, img_hdrs, counters = self._load_images(img,
+                                new_image=True)
+                        except Exception:
+                            imgs = []
 
                         if len(imgs) > 0:
                             new_imgs.extend(imgs)
