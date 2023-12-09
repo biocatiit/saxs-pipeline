@@ -131,7 +131,7 @@ def load_images_and_counters(filenames, settings):
 
                 new_fnames.append(new_filename)
 
-            counters = raw.load_counter_values([fname for n in new_fnames],
+            counters = raw.load_counter_values([filename for n in new_fnames],
                 settings, new_fnames)
 
             counter_list.extend(counters)
