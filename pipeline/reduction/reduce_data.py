@@ -89,10 +89,10 @@ def load_images_and_counters(filenames, settings):
             new_fnames = []
 
             for i in range(len(imgs)):
-                img = new_data[i]
-                img_hdr = new_hdr[i]
+                img = imgs[i]
+                img_hdr = img_hdrs[i]
 
-                if i == 0 and (len(new_data) > 1 or is_hdf5):
+                if i == 0 and (len(imgs) > 1 or is_hdf5):
 
                     temp_filename = os.path.split(filename)[1].split('.')
 
@@ -113,11 +113,11 @@ def load_images_and_counters(filenames, settings):
                     if 'Number_of_images_per_file' in base_hdr:
                         mult = int(base_hdr['Number_of_images_per_file'])
                     else:
-                        mult = len(new_data)
+                        mult = len(imgs)
 
                     offset = sname_offset*mult
 
-                if len(new_data) > 1 or is_hdf5:
+                if len(imgs) > 1 or is_hdf5:
                     temp_filename = os.path.split(filename)[1].split('.')
 
                     if len(temp_filename) > 1:
