@@ -248,10 +248,7 @@ class monitor_and_load(threading.Thread):
                         new_failed.append(item)
                         self._log('info', 'Failed to load image')
                     else:
-                        try:
-                            imgs, fnames, img_hdrs, counters = self._load_images(img)
-                        except Exception:
-                            imgs = []
+                        imgs, fnames, img_hdrs, counters = self._load_images(img)
 
                         if len(imgs) > 0:
                             new_succeded.append(item)
@@ -340,11 +337,8 @@ class monitor_and_load(threading.Thread):
                         if self._abort_event.is_set():
                             break
 
-                        try:
-                            imgs, fnames, img_hdrs, counters = self._load_images(img,
-                                new_image=True)
-                        except Exception:
-                            imgs = []
+                        imgs, fnames, img_hdrs, counters = self._load_images(img,
+                            new_image=True)
 
                         if len(imgs) > 0:
                             new_imgs.extend(imgs)
@@ -430,7 +424,7 @@ class monitor_and_load(threading.Thread):
 
             self._log('debug', 'Loaded image {}'.format(img_name))
 
-        except SASExceptions.HeaderLoadError:
+        except Exception:
             imgs = img_hdrs = counters = fnames = []
 
         return imgs, fnames, img_hdrs, counters

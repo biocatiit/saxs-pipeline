@@ -4,7 +4,7 @@ Automation for SAXS processing, packaging, and reporting at BioCAT
 Requires:
 - pyzmq
 - bitshuffle
-- lzw
+- lz4
 - numpy
 - scipy
 - matplotlib
