@@ -223,9 +223,9 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     port = '9999'
-    ip = '164.54.204.141'
+    ip = '164.54.204.140'
 
-    r = requests.put('http://164.54.204.141/stream/api/1.8.0/config/mode',
+    r = requests.put('http://164.54.204.140/stream/api/1.8.0/config/mode',
     data='{"value": "enabled"}')
     print(r)
     print(r.text)
