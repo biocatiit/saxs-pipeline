@@ -316,7 +316,7 @@ def run_dammif(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
 
     save_data = SASFileIO.saveDammixData(save_path, ambi_data, nsd_data,
         res_data, clust_num, clist_data, dlist_data, model_data, setup_data,
-        model_plots)
+        model_plots, 1)
 
     dammif_data = report_data.parse_dammif_file(None, save_data.split('\n'))
 
@@ -428,7 +428,7 @@ def run_denss(ift, settings, out_dir, nruns=5, mode='Fast', average=True,
         if abort_event.is_set():
             break
         (rho, chi_sq, rg, support_vol, side, q_fit, I_fit, I_extrap,
-            err_extrap, all_chi_sq, all_rg, all_support_vol) = raw.denss(ift,
+            err_extrap, all_chi_sq, all_rg, all_support_vol, fit) = raw.denss(ift,
             '{}_{:02d}'.format(prefix, i+1), denss_dir, mode=mode,
             abort_event=abort_event)
 
