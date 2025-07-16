@@ -9,4 +9,5 @@ Requires:
 - scipy
 - matplotlib
 - reportlab
+- requests
 - bioxtasraw (installed as a package, for API)
